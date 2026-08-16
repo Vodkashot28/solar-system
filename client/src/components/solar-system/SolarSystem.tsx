@@ -29,7 +29,7 @@ import { useSimulation } from "@/stores/simulation";
 import OrbitalBody from "./OrbitalBody";
 import { useAIClassification } from "@/hooks/useAIClassification";
 import { useKeyboardNavigation } from "@/hooks/useKeyboardNavigation";
-import { usePlayerMovements } from "@/hooks/usePlayerMovements";
+import { usePlayerMovements, type PlayerMovementEvent } from "@/hooks/usePlayerMovements";
 
 // Lazy load heavy modal components to reduce initial bundle size
 const BodyDetailModal = lazy(() => import("./BodyDetailModal"));
@@ -174,9 +174,11 @@ export default function SolarSystem() {
   });
 
   // Real-time player movement tracking (Telegram ↔ Web sync)
-  usePlayerMovements(true, (event) => {
+  const handlePlayerMovement = useCallback((event: PlayerMovementEvent) => {
     console.log(`🛸 SOLARIS: Player ${event.userId} → ${event.bodyName}`);
-  });
+  }, []);
+  
+  usePlayerMovements(true, handlePlayerMovement);
 
   const scaleMultiplier =
     scaleMode === "visual"       ? SCALE_VISUAL        :

@@ -68,7 +68,10 @@ export function useAIClassification(activeBody: Body): Record<string, AIAnalysis
       .catch(() => {
         // AI service offline — fail silently.
       });
-  }, [activeBody.id, activeBody.properties, aiCache]);
+    // aiCache is intentionally not in deps — the early-exit guard and
+    // functional updater prevent infinite loops, and excluding it avoids
+    // unnecessary re-subscriptions on every fetch completion.
+  }, [activeBody.id]);
 
   return aiCache;
 }

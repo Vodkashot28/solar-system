@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { useXR, useXRHitTest, PointerEvents } from "@react-three/xr";
@@ -64,7 +64,10 @@ export function ARScene({ mode, bodyId }: { mode: "orrery" | "focus"; bodyId?: s
   const { placed, setPlaced, scale } = useAR();
   const [anchor, setAnchor] = useState<THREE.Matrix4 | null>(null);
 
-  const previewAnchor = new THREE.Matrix4().makeTranslation(0, -0.28, -0.85);
+  const previewAnchor = useMemo(
+    () => new THREE.Matrix4().makeTranslation(0, -0.28, -0.85),
+    []
+  );
 
   const anchorMatrix = presenting && anchor ? anchor : previewAnchor;
 

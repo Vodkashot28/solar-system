@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useCameraFocus } from '@/stores/camera-focus';
+import { BODIES } from '@/components/solar-system/bodies';
 
 export interface PlayerMovementEvent {
   type: 'player_moved' | 'connected';
@@ -46,10 +47,19 @@ export function usePlayerMovements(
             onMovement(data);
           }
           
-          // Auto-focus camera on movements (only if not manually focused)
-          const { isFocused, focus } = useCameraFocus.getState();
-          if (!isFocused) {
-            focus(data.bodyName.toLowerCase());
+          // Resolve bodyName to bodyId (case-insensitive name match)
+          const body = BODIES.find(
+            b => b.name.toLowerCase() === data.bodyName!.toLowerCase()
+          );
+          
+          if (body) {
+            // Auto-focus camera on movements (only if not manually focused)
+            const { isFocused, focus } = useCameraFocus.getState();
+            if (!isFocused) {
+              focus(body.id);
+            }
+          } else {
+            console.warn('[SSE] Unknown body name:', data.bodyName);
           }
         }
       } catch (err) {

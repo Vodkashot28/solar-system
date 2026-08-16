@@ -12,6 +12,7 @@ import RingSystem from "./RingSystem";
 import { applyProceduralMaterials, getCachedDiffuse, getCachedNormal, getCachedRoughness } from "@/lib/procedural-textures";
 import { getHeliocentricPosition, ASTRONOMY_BODIES } from "@/lib/astronomy-positions";
 import { solveKepler } from "@/lib/kepler";
+import { normalizeModel, optimizeObject3D, SHARED_SPHERE_GEOMETRY } from "@/lib/three-utils";
 
 // ── Planet rendering constants ────────────────────────────────────────────────
 /** Minimum radius fraction kept at scale 0 so bodies never vanish completely. */
@@ -32,8 +33,6 @@ type PlanetProps = {
 };
 
 const ATMOSPHERE_BODIES = new Set(["earth", "venus", "mars", "jupiter", "saturn", "neptune"]);
-
-const FALLBACK_GEOMETRY = new THREE.SphereGeometry(1, 48, 48);
 
 // Cache per-body fallback materials to avoid cloning on every render
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
@@ -67,17 +66,7 @@ function GLBModel({ url, radius, body, onReady }: {
   const { scene } = useGLTF(url);
 
   useMemo(() => {
-    const box = new THREE.Box3().setFromObject(scene);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    const scale = (radius * 2) / maxDim;
-    scene.scale.setScalar(scale);
-
-    box.setFromObject(scene);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    scene.position.sub(center);
+    normalizeModel(scene, radius);
 
     // Apply procedural materials only to rocky bodies whose GLB lacks a real
     // diffuse map (e.g. the high-poly untextured dwarf-planet spheres). Bodies
@@ -98,17 +87,7 @@ function GLBModel({ url, radius, body, onReady }: {
       applyProceduralMaterials(scene, body.id, body.type);
     }
 
-    scene.traverse((obj: THREE.Object3D) => {
-      const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh) {
-        mesh.frustumCulled = true;
-        mesh.geometry?.computeBoundingSphere();
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
-      }
-    });
-    scene.matrixAutoUpdate = false;
-    scene.updateMatrix();
+    optimizeObject3D(scene);
     finishLoad(body.id);
   }, [scene, radius, body.id, body.type]);
 
@@ -167,7 +146,7 @@ function FallbackSphere({ radius, color, emissive, bodyId, bodyType }: {
     return materialCache.get(key)!;
   }, [color, emissive, bodyId, bodyType]);
   return (
-    <mesh geometry={FALLBACK_GEOMETRY} scale={radius}>
+    <mesh geometry={SHARED_SPHERE_GEOMETRY} scale={radius}>
       <primitive object={mat} attach="material" />
     </mesh>
   );
@@ -184,6 +163,9 @@ export default React.memo(function Planet({ body, onPosition, scaleMultiplier = 
   // Position lives in a ref (updated in useFrame) — LOD only re-renders when
   // the level actually crosses a distance threshold, never every frame.
   const currentPosition = useRef<THREE.Vector3>(new THREE.Vector3());
+  // Frame counter for LOD-based update throttling (frame param in useFrame
+  // is XRFrame|undefined, not a numeric counter).
+  const frameCount = useRef(0);
 
   // LOD system: dynamically switch between high-detail GLB and low-poly fallback
   const lodConfig = useMemo(() => getDeviceAdjustedLODConfig(), []);
@@ -227,7 +209,7 @@ export default React.memo(function Planet({ body, onPosition, scaleMultiplier = 
     [onHover],
   );
 
-  useFrame((state, delta, frame) => {
+  useFrame((state, delta) => {
     const p = pivot.current;
     // Skip position/spin updates when paused (speed=0) and not in cinematic
     // tour — no movement means no need to recalculate orbital positions.
@@ -235,7 +217,8 @@ export default React.memo(function Planet({ body, onPosition, scaleMultiplier = 
     
     // LOD-based update frequency: distant/culled planets skip frames to save CPU
     const updateFreq = lodLevel === 'culled' ? 10 : lodLevel === 'low' ? 3 : 1;
-    const shouldUpdateThisFrame = frame % updateFreq === 0;
+    frameCount.current++;
+    const shouldUpdateThisFrame = frameCount.current % updateFreq === 0;
     
     if (p && shouldUpdate) {
       if (!isStationary && shouldUpdateThisFrame) {

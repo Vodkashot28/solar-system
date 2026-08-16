@@ -152,11 +152,8 @@ export default function BodyDetailModal({ body, onClose, positions, onDeleteCust
                     <button
                       key={bodyId}
                       onClick={() => {
-                        const pos = positions.current[bodyId];
-                        if (pos) {
-                          focus(bodyId);
-                          onClose();
-                        }
+                        focus(bodyId);
+                        onClose();
                       }}
                       aria-label={`Focus on ${match.name}`}
                       className="min-h-[44px] flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 transition-all duration-150 hover:bg-white/10 hover:text-white active:scale-95"

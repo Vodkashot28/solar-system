@@ -69,6 +69,8 @@ export function useKeyboardNavigation({
 
       switch (e.key) {
         case " ": {
+          // Skip if search is open (user may be typing in the search box)
+          if (searchOpen) return;
           e.preventDefault();
           onToggleTour();
           break;

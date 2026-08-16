@@ -1,237 +1,22 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import fs from "fs";
-import path from "path";
 import { db } from "./db";
-import { aiCache, corrections, celestialBodies, playerCharacters } from "../shared/schema";
+import { celestialBodies, playerCharacters } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { getMergedAICache, FILE_CACHE_COUNT, getLastDBCount } from "./ai-cache";
+import { handleCorrection } from "./corrections";
 
-const SPACEAI_URL      = process.env.SPACEAI_URL ?? "http://127.0.0.1:8000";
+const SPACEAI_URL = process.env.SPACEAI_URL ?? "http://127.0.0.1:8000";
 const PROXY_TIMEOUT_MS = 10_000;
-
-// ── File-based cache fallback ──────────────────────────────────────────────
-// FastAPI's precompute step writes spaceAI/data/ai_cache.json. Load it once at
-// startup so classification endpoints work even when both Postgres and
-// FastAPI (:8000) are offline.
-const FILE_CACHE_PATH = path.resolve(process.cwd(), "spaceAI/data/ai_cache.json");
-
-function loadFileCache(): Record<string, unknown> {
-  try {
-    const raw = fs.readFileSync(FILE_CACHE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      logger.warn({ path: FILE_CACHE_PATH }, 'Unexpected shape in AI cache file');
-      return {};
-    }
-    return parsed as Record<string, unknown>;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      logger.error({ err, path: FILE_CACHE_PATH }, 'Failed to load AI cache file');
-    }
-    return {};
-  }
-}
-
-const FILE_CACHE = loadFileCache();
-const FILE_CACHE_COUNT = Object.keys(FILE_CACHE).length;
-if (FILE_CACHE_COUNT > 0) {
-  logger.info({ count: FILE_CACHE_COUNT, path: FILE_CACHE_PATH }, 'Loaded AI classifications from file cache');
-}
-
-// ── Pending corrections queue ──────────────────────────────────────────────
-// Corrections are forwarded to FastAPI so retrain can use them. When FastAPI
-// is offline the correction is queued to disk; FastAPI drains the queue on
-// startup, so no correction is ever orphaned in Postgres only.
-const PENDING_CORRECTIONS_PATH = path.resolve(
-  process.cwd(),
-  "spaceAI/data/pending_corrections.json",
-);
-
-function queuePendingCorrection(bodyId: string, body: Record<string, unknown>): void {
-  try {
-    let pending: Array<Record<string, unknown>> = [];
-    if (fs.existsSync(PENDING_CORRECTIONS_PATH)) {
-      const raw = fs.readFileSync(PENDING_CORRECTIONS_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) pending = parsed;
-    }
-    pending.push({ body_id: bodyId, ...body, queued_at: new Date().toISOString() });
-    fs.writeFileSync(
-      PENDING_CORRECTIONS_PATH,
-      JSON.stringify(pending, null, 2) + "\n",
-      "utf-8",
-    );
-    logger.info({ bodyId, path: PENDING_CORRECTIONS_PATH }, 'FastAPI offline — queued correction');
-  } catch (err) {
-    logger.error({ err, bodyId }, 'Failed to queue pending correction');
-  }
-}
-
-function mergeCacheSources(...sources: Array<Record<string, unknown> | null>): Record<string, unknown> {
-  const merged: Record<string, unknown> = {};
-  for (const source of sources) {
-    if (!source) continue;
-    for (const [bodyId, entry] of Object.entries(source)) {
-      if (!(bodyId in merged)) merged[bodyId] = entry;
-    }
-  }
-  return merged;
-}
-
-// ── Taxonomy auto-sync ──────────────────────────────────────────────────────
-
-const TAXONOMY_PATH = path.resolve(process.cwd(), "spaceAI/data/solar_system.json");
-
-const VALID_CATEGORIES = new Set([
-  "Star", "Planet", "DwarfPlanet", "Asteroid", "Comet", "Interstellar", "Moon", "Spacecraft",
-]);
-
-const ID_TO_TAXONOMY_NAME: Record<string, string> = {
-  "io":              "Io",
-  "oumuamua":        "1I/'Oumuamua",
-  "borisov":         "2I/Borisov",
-  "churyumov":       "67P/Churyumov-Gerasimenko",
-  "tempel1":         "9P/Tempel 1",
-  "wild2":           "81P/Wild 2",
-  "hubble":          "Hubble",
-  "jwst":            "JWST",
-  "apollo-lm":       "Apollo Lunar Module",
-  "voyager":         "Voyager",
-  "voyager-2":       "Voyager2",
-  "juno":            "Juno",
-  "juno-spacecraft": "Juno",
-};
-
-// Disambiguate entries with identical names (asteroid Juno vs spacecraft Juno)
-const ID_TO_EXPECTED_CATEGORY: Record<string, string> = {
-  "juno":            "Asteroid",
-  "juno-spacecraft": "Spacecraft",
-};
-
-/** Update the body's category in spaceAI/data/solar_system.json. Failures are non-fatal. */
-function syncTaxonomyToJson(bodyId: string, correctedType: string): void {
-  if (!VALID_CATEGORIES.has(correctedType)) {
-    console.warn(`[taxonomy] Invalid category "${correctedType}" — skipping`);
-    return;
-  }
-  try {
-    const name = ID_TO_TAXONOMY_NAME[bodyId] ??
-      bodyId.charAt(0).toUpperCase() + bodyId.slice(1);
-
-    if (!fs.existsSync(TAXONOMY_PATH)) {
-      console.warn(`[taxonomy] File not found: ${TAXONOMY_PATH}`);
-      return;
-    }
-
-    const raw     = fs.readFileSync(TAXONOMY_PATH, "utf-8");
-    const entries = JSON.parse(raw);
-    if (!Array.isArray(entries)) { console.warn("[taxonomy] Expected array"); return; }
-
-    const expectedCategory = ID_TO_EXPECTED_CATEGORY[bodyId];
-    let updated = false;
-
-    for (const entry of entries) {
-      if (entry.name !== name) continue;
-      if (expectedCategory && entry.category !== expectedCategory) continue;
-      entry.category = correctedType;
-      updated = true;
-      break;
-    }
-
-    if (!updated) {
-      console.warn(`[taxonomy] No entry found for body_id="${bodyId}" (name="${name}")`);
-      return;
-    }
-
-    fs.writeFileSync(TAXONOMY_PATH, JSON.stringify(entries, null, 2) + "\n", "utf-8");
-    console.log(`[taxonomy] Synced ${bodyId} → ${correctedType}`);
-  } catch (err) {
-    console.error("[taxonomy] Sync failed:", err);
-  }
-}
-
-// Static fallback classifications for known spacecraft that may not have
-// precomputed entries in the ai_cache DB table. These prevent a 503 when
-// the FastAPI backend (:8000) is offline.
-const STATIC_CLASSIFICATIONS: Record<string, {
-  classification: string;
-  confidence: number;
-  alternatives: { type: string; score: number }[];
-  features: { name: string; value: number; importance: number }[];
-  similarObjects: { bodyId: string; similarity: number }[];
-}> = {
-  "apollo-lm": {
-    classification: "Spacecraft",
-    confidence: 0.92,
-    alternatives: [{ type: "Lander", score: 0.08 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "huygens", similarity: 0.65 }],
-  },
-  "new-horizons": {
-    classification: "Spacecraft",
-    confidence: 0.95,
-    alternatives: [{ type: "Flyby Spacecraft", score: 0.05 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "voyager", similarity: 0.82 }],
-  },
-  "juno-spacecraft": {
-    classification: "Spacecraft",
-    confidence: 0.93,
-    alternatives: [{ type: "Orbiter", score: 0.07 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "cassini", similarity: 0.78 }],
-  },
-  "voyager": {
-    classification: "Spacecraft",
-    confidence: 0.97,
-    alternatives: [{ type: "Interstellar Probe", score: 0.03 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "voyager-2", similarity: 0.95 }],
-  },
-  "voyager-2": {
-    classification: "Spacecraft",
-    confidence: 0.97,
-    alternatives: [{ type: "Interstellar Probe", score: 0.03 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "voyager", similarity: 0.95 }],
-  },
-  "cassini": {
-    classification: "Spacecraft",
-    confidence: 0.94,
-    alternatives: [{ type: "Orbiter", score: 0.06 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "juno-spacecraft", similarity: 0.78 }],
-  },
-  "huygens": {
-    classification: "Spacecraft",
-    confidence: 0.91,
-    alternatives: [{ type: "Atmospheric Probe", score: 0.09 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "apollo-lm", similarity: 0.65 }],
-  },
-  "perseverance": {
-    classification: "Spacecraft",
-    confidence: 0.96,
-    alternatives: [{ type: "Rover", score: 0.04 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "curiosity", similarity: 0.88 }],
-  },
-  "curiosity": {
-    classification: "Spacecraft",
-    confidence: 0.96,
-    alternatives: [{ type: "Rover", score: 0.04 }],
-    features: [{ name: "type", value: 1, importance: 1.0 }],
-    similarObjects: [{ bodyId: "perseverance", similarity: 0.88 }],
-  },
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────────
 
 // ── Server-Sent Events for Real-Time Sync ─────────────────────────────────
 // Telegram /travel movements broadcast to all connected web clients
 const sseClients = new Set<Response>();
+// Note: In dev with hot-reload (tsx watch), the module-level Set can accumulate
+// stale client references across reloads. This is harmless (failed writes are
+// caught and removed), but in production or for long-running dev sessions, the
+// cleanup on client disconnect (req.on("close")) ensures the set stays lean.
 
 function broadcastPlayerMovement(userId: number, bodyId: number, bodyName: string): void {
   const event = JSON.stringify({
@@ -257,82 +42,14 @@ function broadcastPlayerMovement(userId: number, bodyId: number, bodyName: strin
   clientsToRemove.forEach((client) => sseClients.delete(client));
 }
 
-// ── In-memory merged AI cache ──────────────────────────────────────────────
-// DB rows are only re-read on a 60s TTL or after a correction is submitted, so
-// the AI endpoints never pay Neon connect latency (1-2s) per request. Falls
-// back to the file cache (loaded at startup) when Postgres is slow or offline.
-const AI_CACHE_TTL_MS = 60_000;
-let mergedAICache: Record<string, unknown> | null = null;
-let mergedAICacheLoadedAt = 0;
-let lastDBCount = 0;
-let aiCacheRefreshing: Promise<void> | null = null;
-
-// Order: DB rows win, then the file cache fills gaps, then the static
-// classifications (spacecraft with no upstream model) fill the rest.
-function mergeAllCacheSources(dbRows: Record<string, unknown> | null): Record<string, unknown> {
-  const merged = mergeCacheSources(dbRows, FILE_CACHE);
-  for (const [bodyId, entry] of Object.entries(STATIC_CLASSIFICATIONS)) {
-    if (!(bodyId in merged)) {
-      merged[bodyId] = { bodyId, ...entry };
-    }
-  }
-  return merged;
-}
-
-// Seed from the cache file at boot so the very first request serves instantly
-// instead of blocking ~1.8s on the Neon query. The background refresh replaces
-// it as soon as Postgres answers.
-mergedAICache = mergeAllCacheSources(null);
-mergedAICacheLoadedAt = 0;
-
-async function refreshMergedAICache(): Promise<Record<string, unknown>> {
-  const now = Date.now();
-
-  try {
-    const rows = await db.select().from(aiCache);
-    lastDBCount = rows.length;
-    mergedAICache = mergeAllCacheSources(
-      Object.fromEntries(rows.map((r) => [r.bodyId, r])),
-    );
-  } catch {
-    mergedAICache = mergeAllCacheSources(null);
-  }
-  mergedAICacheLoadedAt = now;
-  return mergedAICache;
-}
-
-async function getMergedAICache(force = false): Promise<Record<string, unknown>> {
-  // Fresh cache — serve instantly.
-  if (!force && mergedAICache !== null && Date.now() - mergedAICacheLoadedAt < AI_CACHE_TTL_MS) {
-    return mergedAICache;
-  }
-
-  // Expired but non-null — stale-while-revalidate: serve the cached snapshot
-  // immediately and refresh from Postgres in the background (single-flight),
-  // so a cold cache never blocks boot on Neon's 1-2s connect latency.
-  if (!force && mergedAICache !== null) {
-    if (!aiCacheRefreshing) {
-      aiCacheRefreshing = refreshMergedAICache().then(
-        () => {
-          aiCacheRefreshing = null;
-        },
-        () => {
-          aiCacheRefreshing = null;
-        },
-      );
-    }
-    return mergedAICache;
-  }
-
-  return refreshMergedAICache();
-}
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 async function proxyToFastAI(req: Request, res: Response, endpoint: string): Promise<void> {
   const controller = new AbortController();
-  const timer      = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
     const upstream = await fetch(`${SPACEAI_URL}${endpoint}`, { signal: controller.signal });
-    const data     = await upstream.json();
+    const data = await upstream.json();
     res.status(upstream.status).json(data);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
@@ -343,56 +60,6 @@ async function proxyToFastAI(req: Request, res: Response, endpoint: string): Pro
   } finally {
     clearTimeout(timer);
   }
-}
-
-/**
- * Core correction handler — saves to Postgres and forwards to FastAPI.
- * Used by both POST /api/ai/correct and POST /api/classify/:bodyId/correct.
- */
-async function handleCorrection(
-  bodyId: string,
-  body: Record<string, unknown>,
-  res: Response,
-): Promise<void> {
-  const { predicted_type, corrected_type, features, uncertainty } = body;
-
-  if (!corrected_type) {
-    res.status(400).json({ error: "corrected_type required" });
-    return;
-  }
-
-  try {
-    await db.insert(corrections).values({
-      bodyId,
-      predictedType: (predicted_type as string) ?? "",
-      correctedType: corrected_type as string,
-      features:      (features as object) ?? {},
-      uncertainty:   (uncertainty as number) ?? null,
-      source:        "user",
-    });
-    // Corrections must surface immediately — force a fresh merge next read.
-    mergedAICache = null;
-  } catch (err) {
-    console.error("[db] failed to save correction:", err);
-  }
-
-  // Auto-sync the corrected type to solar_system.json
-  syncTaxonomyToJson(bodyId, corrected_type as string);
-
-  // Forward to FastAPI so retrain incorporates it — queue to disk if offline
-  try {
-    const upstream = await fetch(`${SPACEAI_URL}/classify/${bodyId}/correct`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(body),
-      signal:  AbortSignal.timeout(PROXY_TIMEOUT_MS),
-    });
-    if (!upstream.ok) queuePendingCorrection(bodyId, body);
-  } catch {
-    queuePendingCorrection(bodyId, body);
-  }
-
-  res.json({ status: "ok" });
 }
 
 // ── Route registration ─────────────────────────────────────────────────────
@@ -432,7 +99,7 @@ export function registerRoutes(app: Express): Server {
         status: "ok",
         cachedBodies: Object.keys(merged).length,
         sources: {
-          database: lastDBCount,
+          database: getLastDBCount(),
           fileCache: FILE_CACHE_COUNT,
         },
         responseTime: Date.now() - cacheStart,

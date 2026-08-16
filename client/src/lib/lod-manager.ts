@@ -43,13 +43,15 @@ type LODManagerProps = {
 export function LODManager({ position, radius, config, onLODChange, children }: LODManagerProps) {
   const camera = useThree((state) => state.camera);
   const [lodLevel, setLODLevel] = useState<LODLevel>("high");
+  const lodLevelRef = useRef<LODLevel>("high");
   const groupRef = useRef<THREE.Group>(null);
 
   const finalConfig: LODConfig = { ...DEFAULT_LOD_CONFIG, ...config };
 
   useFrame(() => {
     if (!finalConfig.enabled || !groupRef.current) {
-      if (lodLevel !== "high") {
+      if (lodLevelRef.current !== "high") {
+        lodLevelRef.current = "high";
         setLODLevel("high");
         onLODChange?.("high");
       }
@@ -73,7 +75,8 @@ export function LODManager({ position, radius, config, onLODChange, children }: 
       newLevel = "high";
     }
 
-    if (newLevel !== lodLevel) {
+    if (newLevel !== lodLevelRef.current) {
+      lodLevelRef.current = newLevel;
       setLODLevel(newLevel);
       onLODChange?.(newLevel);
     }
@@ -89,12 +92,16 @@ export function LODManager({ position, radius, config, onLODChange, children }: 
 export function useLODLevel(position: THREE.Vector3, radius: number, config?: Partial<LODConfig>): LODLevel {
   const camera = useThree((state) => state.camera);
   const [lodLevel, setLODLevel] = useState<LODLevel>("high");
+  const lodLevelRef = useRef<LODLevel>("high");
 
   const finalConfig: LODConfig = { ...DEFAULT_LOD_CONFIG, ...config };
 
   useFrame(() => {
     if (!finalConfig.enabled) {
-      if (lodLevel !== "high") setLODLevel("high");
+      if (lodLevelRef.current !== "high") {
+        lodLevelRef.current = "high";
+        setLODLevel("high");
+      }
       return;
     }
 
@@ -112,7 +119,10 @@ export function useLODLevel(position: THREE.Vector3, radius: number, config?: Pa
       newLevel = "high";
     }
 
-    if (newLevel !== lodLevel) setLODLevel(newLevel);
+    if (newLevel !== lodLevelRef.current) {
+      lodLevelRef.current = newLevel;
+      setLODLevel(newLevel);
+    }
   });
 
   return lodLevel;
@@ -131,12 +141,16 @@ export function useLODRef(
 ): LODLevel {
   const camera = useThree((state) => state.camera);
   const [lodLevel, setLODLevel] = useState<LODLevel>("high");
+  const lodLevelRef = useRef<LODLevel>("high");
 
   const finalConfig: LODConfig = { ...DEFAULT_LOD_CONFIG, ...config };
 
   useFrame(() => {
     if (!finalConfig.enabled) {
-      if (lodLevel !== "high") setLODLevel("high");
+      if (lodLevelRef.current !== "high") {
+        lodLevelRef.current = "high";
+        setLODLevel("high");
+      }
       return;
     }
 
@@ -154,7 +168,10 @@ export function useLODRef(
       newLevel = "high";
     }
 
-    if (newLevel !== lodLevel) setLODLevel(newLevel);
+    if (newLevel !== lodLevelRef.current) {
+      lodLevelRef.current = newLevel;
+      setLODLevel(newLevel);
+    }
   });
 
   return lodLevel;
