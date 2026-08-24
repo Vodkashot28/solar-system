@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { db } from "./db";
 import { celestialBodies, playerCharacters } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -9,6 +10,22 @@ import { handleCorrection } from "./corrections";
 
 const SPACEAI_URL = process.env.SPACEAI_URL ?? "http://127.0.0.1:8000";
 const PROXY_TIMEOUT_MS = 10_000;
+
+// ── Route-level rate limiters ────────────────────────────────────────────────
+const WRITE_LIMIT = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, try again later" },
+});
+const SSE_LIMIT = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many SSE connections" },
+});
 
 // ── Server-Sent Events for Real-Time Sync ─────────────────────────────────
 // Telegram /travel movements broadcast to all connected web clients
@@ -160,7 +177,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // ── Server-Sent Events for Real-Time Player Movement ───────────────────────
-  app.get("/api/events", (req, res) => {
+  app.get("/api/events", SSE_LIMIT, (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -209,7 +226,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // POST /api/ai/correct  (used by AIClassificationPanel)
-  app.post("/api/ai/correct", async (req, res) => {
+  app.post("/api/ai/correct", WRITE_LIMIT, async (req, res) => {
     const bodyId = (req.body?.body_id as string) ?? "";
     if (!bodyId) {
       res.status(400).json({ error: "body_id required" });
@@ -244,14 +261,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/bodies", async (req, res) => {
+  app.post("/api/bodies", WRITE_LIMIT, async (req, res) => {
     const { name, type } = req.body ?? {};
     if (!name || !type) {
       res.status(400).json({ error: "name and type required" });
       return;
     }
+    const CREATE_ALLOWED = new Set([
+      "name","type","mass","radius","density","gravity","temperature",
+      "orbitalPeriod","semiMajorAxis","eccentricity","inclination",
+      "rotationPeriod","axialTilt","aiClassification","aiConfidenceScore",
+      "visualRadius","orbit","orbitSpeed","spinSpeed","tilt","phase",
+      "color","fact","parentBody","hasRings",
+    ]);
+    const safe = Object.fromEntries(
+      Object.entries(req.body ?? {}).filter(([k]) => CREATE_ALLOWED.has(k))
+    ) as { name: string; type: string; [k: string]: unknown };
     try {
-      const rows = await db.insert(celestialBodies).values(req.body).returning();
+      const rows = await db.insert(celestialBodies).values(safe).returning();
       res.status(201).json(rows[0]);
     } catch (err) {
       console.error("[db] failed to create celestial body:", err);
@@ -259,7 +286,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.patch("/api/bodies/:id", async (req, res) => {
+  app.patch("/api/bodies/:id", WRITE_LIMIT, async (req, res) => {
     const id = Number(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
@@ -289,7 +316,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.delete("/api/bodies/:id", async (req, res) => {
+  app.delete("/api/bodies/:id", WRITE_LIMIT, async (req, res) => {
     const id = Number(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
     try {
@@ -331,7 +358,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.patch("/api/player/:telegramUserId/location", async (req, res) => {
+  app.patch("/api/player/:telegramUserId/location", WRITE_LIMIT, async (req, res) => {
     const tgId = parseTelegramUserId(req.params.telegramUserId);
     if (tgId === null) {
       res.status(400).json({ error: "Invalid telegram user id" });

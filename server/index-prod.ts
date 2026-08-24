@@ -17,6 +17,13 @@ export async function serveStatic(app: Express, _server: Server) {
     );
   }
 
+  // Cache index.html in memory — it rarely changes between deploys and
+  // reading it synchronously on every SPA fallback blocks the event loop.
+  const indexPath = path.join(distPath, "index.html");
+  let indexHtml = fs.readFileSync(indexPath, "utf-8");
+  // Re-read on file change (simple polling for deploys, no chokidar needed)
+  let indexMtime = fs.statSync(indexPath).mtimeMs;
+
   const mime = {
     ".js": "application/javascript",
     ".css": "text/css",
@@ -46,13 +53,9 @@ export async function serveStatic(app: Express, _server: Server) {
     const contentType = mime[ext as keyof typeof mime] || "application/octet-stream";
     res.setHeader("Content-Type", contentType);
 
-    // Vite content-hashes build assets, so they can be cached immutably —
-    // repeat visits skip re-downloading the whole bundle.
     if (req.path.startsWith("/assets/") && (ext === ".js" || ext === ".css")) {
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     } else if (req.path.startsWith("/models/") || req.path.startsWith("/draco/")) {
-      // GLBs/Draco are stable between deploys but not hashed — a short
-      // revalidate keeps deploys from serving stale models for a week.
       res.setHeader("Cache-Control", "public, max-age=3600");
     } else {
       res.setHeader("Cache-Control", "no-cache");
@@ -70,11 +73,17 @@ export async function serveStatic(app: Express, _server: Server) {
   });
 
   app.use((_req, res) => {
-    const indexPath = path.join(distPath, "index.html");
-    const content = fs.readFileSync(indexPath);
+    // Re-read if file changed (new deploy dropped fresh index.html)
+    try {
+      const stat = fs.statSync(indexPath);
+      if (stat.mtimeMs !== indexMtime) {
+        indexHtml = fs.readFileSync(indexPath, "utf-8");
+        indexMtime = stat.mtimeMs;
+      }
+    } catch { /* ignore — serve cached version */ }
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");
-    res.end(content);
+    res.end(indexHtml);
   });
 }
 

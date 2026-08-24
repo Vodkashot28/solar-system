@@ -173,6 +173,13 @@ const PLANET_GEOMETRY = new THREE.IcosahedronGeometry(1, 2);
 const SMALL_BODY_GEOMETRY = new THREE.IcosahedronGeometry(1, 1);
 const SPACECRAFT_GEOMETRY = new THREE.BoxGeometry(1, 0.5, 0.7);
 
+// Scratch vectors — reused every frame to avoid GC pressure.
+const _tmp = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _pos = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _basePos = new THREE.Vector3();
+
 export function EnhancedOrrerySystem() {
   const { scale, speed, currentTime, useAstronomicalPositions } = useAR();
   const scaleConfig = ENHANCED_ORRERY_CONFIG.scales[scale];
@@ -233,10 +240,6 @@ export function EnhancedOrrerySystem() {
   useFrame((state) => {
     const t = state.clock.elapsedTime * speed;
     const days = currentTime + t * SIM_SPEED;
-    const tmp = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const pos = new THREE.Vector3();
-    const s = new THREE.Vector3();
 
     // Place a body at its simplified circular orbit, or at its real
     // heliocentric position (scaled to the scale-mode orbit radius) when the
@@ -256,53 +259,53 @@ export function EnhancedOrrerySystem() {
 
     if (planetsRef.current) {
       planetBodies.forEach((body, i) => {
-        placeBody(body, pos);
-        q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
-        s.setScalar(body.visualRadius[scale]);
+        placeBody(body, _pos);
+        _q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
+        _s.setScalar(body.visualRadius[scale]);
 
-        tmp.compose(pos, q, s);
-        planetsRef.current!.setMatrixAt(i, tmp);
+        _tmp.compose(_pos, _q, _s);
+        planetsRef.current!.setMatrixAt(i, _tmp);
       });
       planetsRef.current.instanceMatrix.needsUpdate = true;
     }
     
     if (smallBodiesRef.current) {
       smallBodies.forEach((body, i) => {
-        placeBody(body, pos);
-        q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
-        s.setScalar(body.visualRadius[scale]);
+        placeBody(body, _pos);
+        _q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
+        _s.setScalar(body.visualRadius[scale]);
 
-        tmp.compose(pos, q, s);
-        smallBodiesRef.current!.setMatrixAt(i, tmp);
+        _tmp.compose(_pos, _q, _s);
+        smallBodiesRef.current!.setMatrixAt(i, _tmp);
       });
       smallBodiesRef.current.instanceMatrix.needsUpdate = true;
     }
     
     if (spacecraftRef.current) {
-      const basePos = new THREE.Vector3();
+      _basePos.set(0, 0, 0);
       spacecraftBodies.forEach((body, i) => {
         if (body.parentBody) {
           const parent = visibleBodies.find(b => b.id === body.parentBody);
           if (parent) {
-            placeBody(parent, basePos);
+            placeBody(parent, _basePos);
 
             const craftAngle = body.phase + t * body.orbitSpeed * 3;
             const craftR = parent.visualRadius[scale] * 2;
-            basePos.x += Math.cos(craftAngle) * craftR;
-            basePos.z += Math.sin(craftAngle) * craftR;
-            pos.copy(basePos);
+            _basePos.x += Math.cos(craftAngle) * craftR;
+            _basePos.z += Math.sin(craftAngle) * craftR;
+            _pos.copy(_basePos);
           } else {
-            placeBody(body, pos);
+            placeBody(body, _pos);
           }
         } else {
-          placeBody(body, pos);
+          placeBody(body, _pos);
         }
         
-        q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
-        s.setScalar(body.visualRadius[scale]);
+        _q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, t * body.spinSpeed);
+        _s.setScalar(body.visualRadius[scale]);
         
-        tmp.compose(pos, q, s);
-        spacecraftRef.current!.setMatrixAt(i, tmp);
+        _tmp.compose(_pos, _q, _s);
+        spacecraftRef.current!.setMatrixAt(i, _tmp);
       });
       spacecraftRef.current.instanceMatrix.needsUpdate = true;
     }

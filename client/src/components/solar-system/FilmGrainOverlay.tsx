@@ -6,7 +6,8 @@
  * Pure DOM — sits above the WebGL canvas, below all UI, costs no GPU time.
  */
 
-export default function FilmGrainOverlay() {
+export default function FilmGrainOverlay({ enabled = true }: { enabled?: boolean }) {
+  if (!enabled) return null;
   return (
     <div className="pointer-events-none fixed inset-0 z-10 overflow-hidden" aria-hidden="true">
       <div

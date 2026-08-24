@@ -26,6 +26,7 @@ import FilmGrainOverlay from "./FilmGrainOverlay";
 import { useCameraFocus } from "@/stores/camera-focus";
 import { useCinematicMode } from "@/stores/cinematic-mode";
 import { useSimulation } from "@/stores/simulation";
+import { useComputedRadii } from "@/stores/computed-radii";
 import OrbitalBody from "./OrbitalBody";
 import { useAIClassification } from "@/hooks/useAIClassification";
 import { useKeyboardNavigation } from "@/hooks/useKeyboardNavigation";
@@ -81,11 +82,16 @@ export default function SolarSystem() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customBodyOpen, setCustomBodyOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [filmGrain, setFilmGrain] = useState(() => {
+    // Respect prefers-reduced-motion: disable film grain for users who prefer reduced motion
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return false;
+    }
+    try { return localStorage.getItem("filmGrain") !== "off"; } catch { return true; }
+  });
   const positions = useRef<Record<string, THREE.Vector3>>({});
-  const computedRadii = useRef<Record<string, number>>({});
-  // Bumped when a parent body reports its rendered radius so spacecraft
-  // orbitRadius props (computed from the ref) get a re-render to match.
-  const [, setRadiiVersion] = useState(0);
+  const computedRadii = useComputedRadii((s) => s.radii);
+  const setComputedRadius = useComputedRadii((s) => s.setRadius);
   const clearFocus = useCameraFocus((s) => s.clear);
   const focus = useCameraFocus((s) => s.focus);
   const fitAll = useCameraFocus((s) => s.fitAll);
@@ -201,9 +207,8 @@ export default function SolarSystem() {
   }, [allBodies]);
 
   const reportComputedRadius = useCallback((bodyId: string, radius: number) => {
-    computedRadii.current[bodyId] = radius;
-    setRadiiVersion((v) => v + 1);
-  }, []);
+    setComputedRadius(bodyId, radius);
+  }, [setComputedRadius]);
 
   const handleHover = useCallback((bodyId: string | null) => {
     setHoveredBodyId(bodyId);
@@ -307,7 +312,7 @@ export default function SolarSystem() {
               // Planet scales body.orbit by scaleMultiplier again — divide it
               // back out so the spacecraft orbits at a fixed multiple of the
               // parent's *rendered* radius in every scale mode.
-              orbitRadius={b.parentBody ? (((computedRadii.current[b.parentBody] ?? 1.5) * 2.2) / (scaleMultiplier || 1)) : b.orbit}
+              orbitRadius={b.parentBody ? (((computedRadii[b.parentBody] ?? 1.5) * 2.2) / (scaleMultiplier || 1)) : b.orbit}
               onPosition={reportPosCallbacks[b.id]}
               scaleMultiplier={scaleMultiplier}
               onComputedRadius={reportComputedRadius}
@@ -317,8 +322,8 @@ export default function SolarSystem() {
             />
           ))}
 
-          <FocusCamera positions={positions} computedRadii={computedRadii} bodies={allBodies} />
-          <CinematicTour enabled={tourOn} onActiveChange={setActive} onOverviewChange={setOverview} positions={positions} computedRadii={computedRadii} speedMultiplier={speedMultiplier} bodies={allBodies} />
+          <FocusCamera positions={positions} bodies={allBodies} />
+          <CinematicTour enabled={tourOn} onActiveChange={setActive} onOverviewChange={setOverview} positions={positions} speedMultiplier={speedMultiplier} bodies={allBodies} />
           <PerformanceMetricsProbe />
           <AdaptiveQuality />
 
@@ -395,6 +400,20 @@ export default function SolarSystem() {
               title="Keyboard shortcuts (?)"
             >
               ?
+            </button>
+            <button
+              onClick={() => {
+                setFilmGrain((v) => {
+                  const next = !v;
+                  try { localStorage.setItem("filmGrain", next ? "on" : "off"); } catch {}
+                  return next;
+                });
+              }}
+              className="min-h-[44px] min-w-[44px] rounded-full border border-white/15 bg-white/5 px-3 py-2 text-[10px] font-medium text-white/60 backdrop-blur-md transition-all duration-200 hover:bg-white/10 hover:text-white hover:scale-105 active:scale-95 sm:text-xs"
+              aria-label={filmGrain ? "Disable film grain effect" : "Enable film grain effect"}
+              title={filmGrain ? "Disable film grain" : "Enable film grain"}
+            >
+              {filmGrain ? "◉" : "○"}
             </button>
             <a
               href="#/ar/orrery"
@@ -505,7 +524,7 @@ export default function SolarSystem() {
       <LoadingSpinner />
       <DebugPanel />
       <PerformanceMonitor />
-      <FilmGrainOverlay />
+      <FilmGrainOverlay enabled={filmGrain} />
 
       {hoveredBodyId && (() => {
         const body = allBodies.find((b) => b.id === hoveredBodyId);

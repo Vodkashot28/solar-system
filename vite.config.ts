@@ -132,7 +132,22 @@ export default defineConfig({
           }
         ],
         categories: ['education', 'entertainment', 'science'],
-        screenshots: []
+        screenshots: [
+          {
+            src: '/icons/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Solar System 3D Tour'
+          },
+          {
+            src: '/icons/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Solar System 3D Tour'
+          }
+        ],
       },
       
       workbox: {
@@ -187,6 +202,21 @@ export default defineConfig({
             }
           },
           {
+            // jsDelivr CDN models — same 30-day cache as local models
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/gh\/.*\.glb$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'glb-models-cdn',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 30
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
             urlPattern: /\/draco\/.*\.wasm$/,
             handler: 'CacheFirst',
             options: {
@@ -215,7 +245,7 @@ export default defineConfig({
         ],
         
         // Don't cache source maps in production
-        navigateFallback: null
+        navigateFallback: 'index.html',
       },
       
       devOptions: {

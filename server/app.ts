@@ -2,6 +2,7 @@ import { type Server } from "node:http";
 
 import cors from "cors";
 import compression from "compression";
+import helmet from "helmet";
 import express, {
   type Express,
   type Request,
@@ -15,13 +16,19 @@ import { logger, requestLogger } from "./logger";
 
 export const app = express();
 
+// ── Security headers ────────────────────────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: false,   // R3F inline shaders + blob URLs need this off
+  crossOriginEmbedderPolicy: false,
+}));
+
 const allowedOrigin = process.env.ALLOWED_ORIGIN ?? "*";
 app.use(cors({
   origin: allowedOrigin,
   methods: ["GET", "POST", "PATCH", "DELETE"],
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 
 // Structured logging middleware

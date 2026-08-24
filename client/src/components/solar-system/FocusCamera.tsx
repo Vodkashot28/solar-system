@@ -3,17 +3,17 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { damp3 } from "maath/easing";
 import * as THREE from "three";
 import { useCameraFocus } from "@/stores/camera-focus";
+import { useComputedRadii } from "@/stores/computed-radii";
 import { BODIES, type Body } from "./bodies";
 
 type Props = {
   positions: React.MutableRefObject<Record<string, THREE.Vector3>>;
-  computedRadii: React.MutableRefObject<Record<string, number>>;
   bodies?: Body[];
 };
 
 const ORIGIN = new THREE.Vector3(0, 0, 0);
 
-export default function FocusCamera({ positions, computedRadii, bodies = BODIES }: Props) {
+export default function FocusCamera({ positions, bodies = BODIES }: Props) {
   const { camera, invalidate } = useThree();
   const isFocused = useCameraFocus((s) => s.isFocused);
   const fitAll = useCameraFocus((s) => s.fitAll);
@@ -29,10 +29,11 @@ export default function FocusCamera({ positions, computedRadii, bodies = BODIES 
   // positions + radii (bounding sphere around the origin), so custom bodies
   // and scale modes are honored automatically.
   const computeFit = () => {
+    const radii = useComputedRadii.getState().radii;
     let maxR = 0;
     for (const id of Object.keys(positions.current)) {
       const p = positions.current[id];
-      const r = computedRadii.current[id] ?? 1;
+      const r = radii[id] ?? 1;
       const d = p.distanceTo(ORIGIN) + r;
       if (d > maxR) maxR = d;
     }
@@ -88,7 +89,8 @@ export default function FocusCamera({ positions, computedRadii, bodies = BODIES 
     }
 
     const body = bodies.find((b) => b.id === targetBodyId);
-    const frameR = computedRadii.current[targetBodyId] ?? body?.visualRadius ?? 1;
+    const radii = useComputedRadii.getState().radii;
+    const frameR = radii[targetBodyId] ?? body?.visualRadius ?? 1;
     const dist = frameR * 7 + 7;
     const height = frameR * 0.6 + 2.5;
 

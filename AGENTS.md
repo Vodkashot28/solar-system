@@ -140,17 +140,45 @@ All in `server/routes.ts`. Request cascade: Drizzle DB → `spaceAI/data/ai_cach
 - Free tier: subdomain survives reconnects while key stays registered; released if unused ~2 weeks
 - Start after reboot (dev servers must be up first; `-N` keeps it alive without a shell)
 
+## Skills (`.opencode/skills/`)
+
+Loaded automatically when relevant. Key project-specific skills:
+
+| Skill | When to load |
+|-------|-------------|
+| `frameloop-demand` | Any R3F `useFrame` / Canvas edit — **the #1 freeze bug source** |
+| `glb-asset-json` | Model URL changes, CDN pointer updates |
+| `glb-models` | Adding/fixing/validating GLB models |
+| `celestial-design` | Body catalog, procedural textures, rings |
+| `orbit-tuning` | Orbital motion, speed/scale, Kepler solver |
+| `perf-tuning` | FPS, load times, bundle size |
+| `ai-tuning` | ML model retraining, corrections, accuracy |
+| `dev-server-lifecycle` | Server start/stop, port conflicts |
+
+## MCP Servers (`opencode.json`)
+
+| Server | Purpose |
+|--------|---------|
+| `postgres` | Direct Postgres queries via `@yawlabs/postgres-mcp` (uses `DATABASE_URL`) |
+| `context7` | Up-to-date library docs (React, Three.js, Vite, etc.) |
+| `github` | GitHub API (issues, PRs, repos) via PAT in `/root/.config/opencode/github-token` |
+| `playwright` | Browser automation for E2E testing |
+
+## Permissions (`opencode.json`)
+
+Auto-allowed without prompt: `npm run typecheck`, `npm test`, `npm run validate`, `npm run models:*`, `npm run ai:*`, `git status`, `git diff`, `git log`. Everything else requires confirmation.
+
 ## Free-Tier Model Assignments (all `opencode/*-free`)
 
 | Role | Model | Why |
 |------|-------|-----|
-| Default (`model`) | `deepseek-v4-flash-free` | Proven value leader (AA II 40), best free SWE-bench (~79%), stable |
-| Small tasks (`small_model`) | `north-mini-code-free` | Fastest (69 tok/s), code + terminal tuned |
-| `plan` agent | `nemotron-3-ultra-free` | Frontier reasoning, 1M context, orchestration |
-| `frontend` agent | `laguna-s-2.1-free` | Best complex agentic coding (R3F/Three.js) |
-| `backend` agent | `deepseek-v4-flash-free` | Reliable API/routes work, proven |
-| `ml` agent | `deepseek-v4-flash-free` | Solid Python/data pipelines, cheap |
-| `celestial`/`glb`/`perf`/`orbit` agents | `laguna-s-2.1-free` / `deepseek-v4-flash-free` | Paired to their skills (see `.opencode/agent/`) |
-| `review` agent | `big-pickle` | Stealth model, 2nd best free SWE-bench (~72%), near-paid code review — edit denied |
+| Default (`model`) | `mimo-v2.5-free` | Current default |
+| Small tasks (`small_model`) | `north-mini-code-free` | Fastest, code + terminal tuned |
+| `plan` agent | `nemotron-3-ultra-free` | Frontier reasoning, 1M context |
+| `frontend` agent | `laguna-s-2.1-free` | Complex agentic coding (R3F/Three.js) |
+| `backend` agent | `mimo-v2.5-free` | API/routes work |
+| `ml` agent | `mimo-v2.5-free` | Python/data pipelines |
+| `celestial`/`glb`/`perf`/`orbit` agents | `laguna-s-2.1-free` | Paired to their skills |
+| `review` agent | `big-pickle` | Near-paid code review quality — edit denied |
 
-Unused free models (`ling-3.0-tiny-free`, `longcat-2.0-free`, `mimo-v2.5-free`) are unproven promo tiers — swap in only for experiments. Free promos can disappear; if a model 404s, fall back to `deepseek-v4-flash-free`.
+Free promos can disappear; if a model 404s, fall back to `deepseek-v4-flash-free`.

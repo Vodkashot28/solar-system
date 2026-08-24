@@ -8,18 +8,31 @@ type Props = {
   bodies?: Body[];
 };
 
+const TYPE_FILTERS = [
+  { label: "All", value: "" },
+  { label: "Planets", value: "planet" },
+  { label: "Dwarf Planets", value: "dwarfPlanet" },
+  { label: "Asteroids", value: "asteroid" },
+  { label: "Spacecraft", value: "spacecraft" },
+  { label: "Comets", value: "comet" },
+] as const;
+
 export default function BodySearch({ onSelect, open, onClose, bodies = BODIES }: Props) {
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = query
-    ? bodies.filter((b) => b.name.toLowerCase().includes(query.toLowerCase()))
-    : bodies;
+  const results = bodies.filter((b) => {
+    const matchesType = !typeFilter || b.type === typeFilter;
+    const matchesQuery = !query || b.name.toLowerCase().includes(query.toLowerCase());
+    return matchesType && matchesQuery;
+  });
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setTypeFilter("");
       setActiveIdx(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
@@ -61,6 +74,21 @@ export default function BodySearch({ onSelect, open, onClose, bodies = BODIES }:
             placeholder="Search celestial bodies..."
             className="w-full border-0 bg-transparent px-4 py-4 text-sm text-white outline-none placeholder:text-white/40"
           />
+        </div>
+        <div className="flex gap-1.5 border-b border-white/10 px-4 py-2 overflow-x-auto">
+          {TYPE_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => { setTypeFilter(f.value); setActiveIdx(0); }}
+              className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-medium transition-all ${
+                typeFilter === f.value
+                  ? "bg-white/15 text-white"
+                  : "text-white/40 hover:bg-white/5 hover:text-white/70"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
         {results.length > 0 && (
           <div className="max-h-[50vh] overflow-y-auto overscroll-contain py-1">

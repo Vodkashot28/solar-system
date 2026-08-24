@@ -4,13 +4,13 @@ import * as THREE from "three";
 import { damp3 } from "maath/easing";
 import { BODIES, type Body } from "./bodies";
 import { useCameraFocus } from "@/stores/camera-focus";
+import { useComputedRadii } from "@/stores/computed-radii";
 
 type Props = {
   enabled: boolean;
   onActiveChange?: (body: Body) => void;
   onOverviewChange?: (active: boolean) => void;
   positions: React.MutableRefObject<Record<string, THREE.Vector3>>;
-  computedRadii: React.MutableRefObject<Record<string, number>>;
   speedMultiplier?: number;
   /** Bodies to tour (defaults to the static catalog). */
   bodies?: Body[];
@@ -19,7 +19,7 @@ type Props = {
 const OVERVIEW_DURATION = 10;
 const SECONDS_PER_BODY = 5;
 
-export default function CinematicTour({ enabled, onActiveChange, onOverviewChange, positions, computedRadii, speedMultiplier = 1, bodies = BODIES }: Props) {
+export default function CinematicTour({ enabled, onActiveChange, onOverviewChange, positions, speedMultiplier = 1, bodies = BODIES }: Props) {
   const { camera, invalidate } = useThree();
   const elapsed = useRef(0);
   const currentIndex = useRef(-1);
@@ -95,7 +95,8 @@ export default function CinematicTour({ enabled, onActiveChange, onOverviewChang
 
       const bodyPos = positions.current[body.id];
       if (bodyPos) {
-        const frameR = computedRadii.current[body.id] ?? body.visualRadius;
+        const radii = useComputedRadii.getState().radii;
+        const frameR = radii[body.id] ?? body.visualRadius;
 
         // Continuous arc angle (monotonic across segments) — the old per-segment
         // reset jumped the target 216° around each body, snapping the camera.
