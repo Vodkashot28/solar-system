@@ -1,10 +1,13 @@
-# Exported from Render on 2026-08-14T04:19:33Z
+# Render Blueprint — Solar System 3D Tour
+# Services: Express web, FastAPI ML, Telegram bot worker
 version: "1"
 projects:
 - name: My project
+  env: python
   environments:
   - name: Production
     services:
+    # ── Express web (port 5000) ───────────────────────────────────
     - type: web
       name: solar-system-api
       runtime: node
@@ -14,9 +17,9 @@ projects:
       - key: DATABASE_URL
         sync: false
       - key: NODE_ENV
-        sync: false
+        value: production
       - key: LOG_LEVEL
-        sync: false
+        value: info
       - key: ALLOWED_ORIGIN
         sync: false
       - key: SPACEAI_URL
@@ -26,6 +29,7 @@ projects:
       startCommand: node dist/index-prod.js
       healthCheckPath: /api/health
       autoDeployTrigger: commit
+    # ── FastAPI ML (port 8000) ───────────────────────────────────
     - type: web
       name: solar-system-ml
       runtime: python
@@ -35,6 +39,28 @@ projects:
       buildCommand: cd spaceAI && python -m venv venv && ./venv/bin/pip install -r
         requirements.txt
       startCommand: cd spaceAI && ./venv/bin/python run.py serve
-      healthCheckPath: /health
+      healthCheckPath: /
       autoDeployTrigger: commit
-
+      envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+    # ── Telegram bot worker (background) ──────────────────────────
+    - type: worker
+      name: solar-system-bot
+      runtime: python
+      repo: https://github.com/vodkashot-star/solar-system
+      plan: free
+      region: oregon
+      buildCommand: cd spaceAI && python -m venv venv && ./venv/bin/pip install -r
+        requirements.txt
+      startCommand: cd spaceAI && ./venv/bin/python telegram_bot.py
+      autoDeployTrigger: commit
+      envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENCODE_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
