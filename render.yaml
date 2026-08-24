@@ -3,7 +3,6 @@
 version: "1"
 projects:
 - name: My project
-  env: python
   environments:
   - name: Production
     services:
