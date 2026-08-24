@@ -717,6 +717,7 @@ export const BODIES: Body[] = [
     phase: 3.7, 
     color: "#d2a679", 
     glbUrl: jupiterGlb.url, 
+    hasRings: true,
     fact: "A failed star. More massive than all other planets combined.",
     properties: ASTRONOMICAL_DATA.jupiter
   },
@@ -855,6 +856,7 @@ export const BODIES: Body[] = [
     phase: 3.4, 
     color: "#b0bccc", 
     glbUrl: haumeaGlb.url, 
+    hasRings: true,
     fact: "Rapidly spinning dwarf planet with two moons and a ring system.",
     properties: ASTRONOMICAL_DATA.haumea
   },

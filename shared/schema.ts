@@ -1,4 +1,4 @@
-import { pgTable, serial, text, doublePrecision, timestamp, jsonb, integer, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, doublePrecision, timestamp, jsonb, integer, bigint, decimal, boolean } from 'drizzle-orm/pg-core';
 
 // Represents a celestial body (Planet, Moon, Asteroid, etc.)
 export const celestialBodies = pgTable('celestial_bodies', {
@@ -21,16 +21,16 @@ export const celestialBodies = pgTable('celestial_bodies', {
   aiConfidenceScore: doublePrecision('ai_confidence_score'),
 
   // Scene-rendering params (used by the client to place custom bodies in the 3D scene)
-  visualRadius: doublePrecision('visual_radius'),
-  orbit: doublePrecision('orbit'),
-  orbitSpeed: doublePrecision('orbit_speed'),
-  spinSpeed: doublePrecision('spin_speed'),
-  tilt: doublePrecision('tilt'),
-  phase: doublePrecision('phase'),
-  color: text('color'),
+  visualRadius: decimal('visual_radius', { precision: 5, scale: 2 }).notNull().default('1'),
+  orbit: decimal('orbit', { precision: 7, scale: 2 }).notNull().default('10'),
+  orbitSpeed: decimal('orbit_speed', { precision: 8, scale: 6 }).notNull().default('0.1'),
+  spinSpeed: decimal('spin_speed', { precision: 8, scale: 6 }).notNull().default('0.1'),
+  tilt: decimal('tilt', { precision: 5, scale: 3 }).notNull().default('0'),
+  phase: decimal('phase', { precision: 5, scale: 3 }).notNull().default('0'),
+  color: text('color').notNull().default('#ffffff'),
   fact: text('fact'),
   parentBody: text('parent_body'),
-  hasRings: text('has_rings').default('false'),
+  hasRings: boolean('has_rings').notNull().default(false),
 
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

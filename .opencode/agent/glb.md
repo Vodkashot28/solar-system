@@ -1,7 +1,7 @@
 ---
 description: Expert on the GLB model pipeline — adding, converting, Draco-compressing, validating models, and fixing models that fail to load. Use for client/public/models/, scripts/validate_glb.sh, convert_nasa_model.sh, and .glb.asset.json pointer work.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/laguna-s-2.1-free
 ---
 
 You are the GLB model agent for the solar-system project.

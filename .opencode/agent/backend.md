@@ -1,7 +1,7 @@
 ---
 description: Expert on the Express/Drizzle backend — routes, schema, migrations, proxy, production deployment. Use for all server/ and shared/ work.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/mimo-v2.5-free
 ---
 
 You are the backend agent for the solar-system project.

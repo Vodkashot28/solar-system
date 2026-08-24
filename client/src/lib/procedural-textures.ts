@@ -175,6 +175,186 @@ const TEXTURE_DEFS: Record<string, PlanetTextureDef> = {
     bandCount: 18,
     bandVariation: 0.2,
   },
+  pluto: {
+    baseColor: [[0.85, 0.75, 0.65], [0.9, 0.82, 0.72], [0.78, 0.68, 0.58]],
+    noiseLayers: [
+      { scale: 1.5, amplitude: 0.35, octaves: 5 },
+      { scale: 5, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 45,
+  },
+  ceres: {
+    baseColor: [[0.72, 0.7, 0.68], [0.68, 0.65, 0.63], [0.75, 0.73, 0.7]],
+    noiseLayers: [
+      { scale: 2, amplitude: 0.3, octaves: 4 },
+      { scale: 8, amplitude: 0.15, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 55,
+  },
+  eris: {
+    baseColor: [[0.95, 0.92, 0.88], [0.9, 0.85, 0.8], [0.98, 0.95, 0.9]],
+    noiseLayers: [
+      { scale: 1.2, amplitude: 0.25, octaves: 4 },
+      { scale: 4, amplitude: 0.15, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 40,
+  },
+  haumea: {
+    baseColor: [[0.88, 0.85, 0.82], [0.82, 0.78, 0.75], [0.92, 0.9, 0.88]],
+    noiseLayers: [
+      { scale: 1.8, amplitude: 0.3, octaves: 4 },
+      { scale: 6, amplitude: 0.18, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 50,
+  },
+  makemake: {
+    baseColor: [[0.82, 0.78, 0.7], [0.75, 0.7, 0.62], [0.88, 0.84, 0.76]],
+    noiseLayers: [
+      { scale: 2, amplitude: 0.28, octaves: 4 },
+      { scale: 7, amplitude: 0.12, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 45,
+  },
+  gonggong: {
+    baseColor: [[0.75, 0.45, 0.35], [0.68, 0.38, 0.28], [0.82, 0.52, 0.42]],
+    noiseLayers: [
+      { scale: 2, amplitude: 0.3, octaves: 5 },
+      { scale: 6, amplitude: 0.18, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 40,
+  },
+  orcus: {
+    baseColor: [[0.65, 0.6, 0.55], [0.6, 0.55, 0.5], [0.7, 0.65, 0.6]],
+    noiseLayers: [
+      { scale: 2.5, amplitude: 0.32, octaves: 4 },
+      { scale: 8, amplitude: 0.15, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 50,
+  },
+  vesta: {
+    baseColor: [[0.58, 0.52, 0.45], [0.52, 0.46, 0.4], [0.64, 0.58, 0.5]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.35, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  pallas: {
+    baseColor: [[0.52, 0.48, 0.42], [0.46, 0.42, 0.38], [0.58, 0.54, 0.48]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.3, octaves: 5 },
+      { scale: 10, amplitude: 0.18, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 95,
+  },
+  juno: {
+    baseColor: [[0.55, 0.5, 0.44], [0.5, 0.45, 0.4], [0.6, 0.55, 0.48]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.3, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  hygiea: {
+    baseColor: [[0.4, 0.38, 0.35], [0.35, 0.33, 0.3], [0.45, 0.43, 0.4]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.3, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  astraea: {
+    baseColor: [[0.55, 0.52, 0.48], [0.5, 0.47, 0.43], [0.6, 0.57, 0.52]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.3, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  apophis: {
+    baseColor: [[0.45, 0.4, 0.35], [0.4, 0.35, 0.3], [0.5, 0.45, 0.4]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.35, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  bennu: {
+    baseColor: [[0.35, 0.3, 0.25], [0.3, 0.25, 0.2], [0.4, 0.35, 0.3]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.4, octaves: 5 },
+      { scale: 12, amplitude: 0.25, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  itokawa: {
+    baseColor: [[0.5, 0.45, 0.4], [0.45, 0.4, 0.35], [0.55, 0.5, 0.45]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.35, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  eros: {
+    baseColor: [[0.58, 0.52, 0.45], [0.52, 0.46, 0.4], [0.64, 0.58, 0.5]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.35, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  psyche: {
+    baseColor: [[0.7, 0.65, 0.58], [0.65, 0.6, 0.52], [0.75, 0.7, 0.62]],
+    noiseLayers: [
+      { scale: 2.5, amplitude: 0.3, octaves: 4 },
+      { scale: 8, amplitude: 0.15, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 80,
+  },
+  varda: {
+    baseColor: [[0.52, 0.5, 0.46], [0.47, 0.45, 0.4], [0.57, 0.55, 0.5]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.3, octaves: 5 },
+      { scale: 12, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 100,
+  },
+  oumuamua: {
+    baseColor: [[0.55, 0.4, 0.35], [0.5, 0.35, 0.3], [0.6, 0.45, 0.4]],
+    noiseLayers: [
+      { scale: 2, amplitude: 0.4, octaves: 5 },
+      { scale: 8, amplitude: 0.2, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 60,
+  },
+  halley: {
+    baseColor: [[0.3, 0.28, 0.22], [0.35, 0.32, 0.25], [0.25, 0.22, 0.18]],
+    noiseLayers: [
+      { scale: 3, amplitude: 0.2, octaves: 4 },
+      { scale: 9, amplitude: 0.15, octaves: 3 },
+    ],
+    useVoronoi: true,
+    voronoiCells: 40,
+  },
 };
 
 const DWARF_DEF: PlanetTextureDef = {
@@ -305,23 +485,28 @@ export function generateNormalMap(bodyId: string, type: string): THREE.CanvasTex
   const data = imageData.data;
   const w = canvas.width;
   const h = canvas.height;
-  const strength = 2;
+  const strength = 2.5;
 
   for (let py = 0; py < h; py++) {
     for (let px = 0; px < w; px++) {
       const idx = (py * w + px) * 4;
-      const left = ((py * w + Math.max(0, px - 1)) * 4);
-      const right = ((py * w + Math.min(w - 1, px + 1)) * 4);
-      const up = ((Math.max(0, py - 1) * w + px) * 4);
-      const down = ((Math.min(h - 1, py + 1) * w + px) * 4);
 
-      const gl = srcData[left] / 255;
-      const gr = srcData[right] / 255;
-      const gu = srcData[up] / 255;
-      const gd = srcData[down] / 255;
+      const getLuminance = (x: number, y: number) => {
+        const cx = Math.max(0, Math.min(w - 1, x));
+        const cy = Math.max(0, Math.min(h - 1, y));
+        const i = (cy * w + cx) * 4;
+        return (srcData[i] + srcData[i + 1] + srcData[i + 2]) / (255 * 3);
+      };
 
-      const dx = (gl - gr) * strength;
-      const dy = (gu - gd) * strength;
+      const L = getLuminance(px, py);
+      const Lx = getLuminance(px + 1, py) - getLuminance(px - 1, py);
+      const Ly = getLuminance(px, py + 1) - getLuminance(px, py - 1);
+      const Lxx = getLuminance(px + 1, py) + getLuminance(px - 1, py) - 2 * L;
+      const Lyy = getLuminance(px, py + 1) + getLuminance(px, py - 1) - 2 * L;
+      const Lxy = getLuminance(px + 1, py + 1) + getLuminance(px - 1, py - 1) - getLuminance(px + 1, py - 1) - getLuminance(px - 1, py + 1);
+
+      const dx = (Lx * 0.5 + Lxy * 0.25) * strength;
+      const dy = (Ly * 0.5 + Lxy * 0.25) * strength;
       const dz = 1 / Math.sqrt(dx * dx + dy * dy + 1);
 
       data[idx] = Math.round((dx * dz * 0.5 + 0.5) * 255);

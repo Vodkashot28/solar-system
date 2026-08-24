@@ -1,7 +1,7 @@
 ---
 description: Expert on the spaceAI Python ML microservice — model training, FastAPI endpoints, feature engineering, data pipelines. Use for all spaceAI/ work.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/mimo-v2.5-free
 ---
 
 You are the ML agent for the solar-system project.

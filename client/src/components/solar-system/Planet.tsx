@@ -85,6 +85,21 @@ function GLBModel({ url, radius, body, onReady }: {
     }
     if (isRocky && !hasDiffuse) {
       applyProceduralMaterials(scene, body.id, body.type);
+    } else if (!isRocky && body.type === "planet") {
+      // For gas giants with GLB, enhance existing materials slightly
+      scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh) {
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          if (mat && mat.isMaterial) {
+            // Slightly adjust for more realistic gas giant appearance
+            if (mat.roughness > 0.6) mat.roughness = 0.55;
+            if (mat.metalness > 0.15) mat.metalness = 0.1;
+            mat.normalScale = new THREE.Vector2(1.8, 1.8);
+            mat.needsUpdate = true;
+          }
+        }
+      });
     }
 
     optimizeObject3D(scene);

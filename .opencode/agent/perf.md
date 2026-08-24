@@ -1,7 +1,7 @@
 ---
 description: Expert on performance tuning — slow loads, low FPS, boot hangs, bundle size, payload budgets. Use for diagnosing loading stalls and optimizing the solar-system app.
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/laguna-s-2.1-free
 ---
 
 You are the performance agent for the solar-system project.

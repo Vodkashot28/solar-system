@@ -109,14 +109,4 @@ export function validateEnv(): ServerConfig {
   return config;
 }
 
-/**
- * Get validated configuration singleton
- */
-let _config: ServerConfig | null = null;
 
-export function getConfig(): ServerConfig {
-  if (!_config) {
-    _config = validateEnv();
-  }
-  return _config;
-}

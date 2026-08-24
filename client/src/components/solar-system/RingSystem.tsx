@@ -11,7 +11,8 @@
  * bright-side/dark-side illumination gradient.
  */
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Body } from "./bodies";
 
@@ -37,12 +38,40 @@ const SATURN_BANDS: Array<[number, number, number]> = [
   [0.92, 0.95, 0.25],  // Encke dip
 ];
 
-const GENERIC_BANDS: Array<[number, number, number]> = [
-  [0.00, 0.06, 0.35],
-  [0.06, 0.32, 0.8],
-  [0.32, 0.5, 0.62],
-  [0.5, 0.78, 0.85],
-  [0.78, 1.0, 0.45],
+const JUPITER_BANDS: Array<[number, number, number]> = [
+  [0.00, 0.15, 0.0],
+  [0.15, 0.45, 0.25],  // Halo ring
+  [0.45, 0.55, 0.05],  // Main ring inner edge
+  [0.55, 0.85, 0.15],  // Main ring
+  [0.85, 1.00, 0.05],  // Gossamer rings
+];
+
+const URANUS_BANDS: Array<[number, number, number]> = [
+  [0.00, 0.1, 0.0],
+  [0.10, 0.25, 0.15],  // 1986U2R/ζ ring
+  [0.25, 0.35, 0.08],  // Gap
+  [0.35, 0.55, 0.25],  // 6/5/4 rings
+  [0.55, 0.65, 0.08],  // Gap
+  [0.65, 0.85, 0.2],   // α/β/η/γ/δ/λ rings
+  [0.85, 1.00, 0.08],  // Outer rings
+];
+
+const NEPTUNE_BANDS: Array<[number, number, number]> = [
+  [0.00, 0.2, 0.0],
+  [0.20, 0.35, 0.1],   // Galle ring
+  [0.35, 0.5, 0.04],   // Gap
+  [0.50, 0.65, 0.12],  // Le Verrier ring
+  [0.65, 0.75, 0.03],  // Gap
+  [0.75, 0.9, 0.15],   // Arago ring
+  [0.90, 1.00, 0.05],  // Adams ring arcs
+];
+
+const HAUMEA_BANDS: Array<[number, number, number]> = [
+  [0.00, 0.1, 0.0],
+  [0.10, 0.45, 0.25],
+  [0.45, 0.55, 0.1],
+  [0.55, 0.9, 0.2],
+  [0.90, 1.00, 0.05],
 ];
 
 const RING_PARAMETERS: Record<string, RingParameters> = {
@@ -58,7 +87,7 @@ const RING_PARAMETERS: Record<string, RingParameters> = {
     innerRadius: 1.72,
     outerRadius: 1.81,
     inclination: 3.1,
-    opticalDepth: 0.01,
+    opticalDepth: 0.05,
     color: "#8b7d6b",
     segments: 64,
   },
@@ -87,6 +116,22 @@ const RING_PARAMETERS: Record<string, RingParameters> = {
     segments: 32,
   },
 };
+
+const RING_BANDS: Record<string, Array<[number, number, number]>> = {
+  saturn: SATURN_BANDS,
+  jupiter: JUPITER_BANDS,
+  uranus: URANUS_BANDS,
+  neptune: NEPTUNE_BANDS,
+  haumea: HAUMEA_BANDS,
+};
+
+const GENERIC_BANDS: Array<[number, number, number]> = [
+  [0.00, 0.06, 0.35],
+  [0.06, 0.32, 0.8],
+  [0.32, 0.5, 0.62],
+  [0.5, 0.78, 0.85],
+  [0.78, 1.0, 0.45],
+];
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const clean = hex.replace("#", "");
@@ -143,8 +188,8 @@ function createRingGeometry(
 }
 
 function makeRingTexture(params: RingParameters, bodyId: string): THREE.CanvasTexture {
-  const W = 256;
-  const H = 8;
+  const W = 512;
+  const H = 16;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -153,7 +198,7 @@ function makeRingTexture(params: RingParameters, bodyId: string): THREE.CanvasTe
   const data = imageData.data;
 
   const { r, g, b } = hexToRgb(params.color);
-  const bands = bodyId === "saturn" ? SATURN_BANDS : GENERIC_BANDS;
+  const bands = RING_BANDS[bodyId] || GENERIC_BANDS;
   const maxOpacity = Math.min(params.opticalDepth * 1.2, 0.85);
 
   for (let x = 0; x < W; x++) {
@@ -166,18 +211,22 @@ function makeRingTexture(params: RingParameters, bodyId: string): THREE.CanvasTe
     alpha *= maxOpacity;
 
     // Soft falloff at the inner and outer edges.
-    const edge = Math.min(1, u / 0.04, (1 - u) / 0.04);
+    const edge = Math.min(1, u / 0.03, (1 - u) / 0.03);
     alpha *= Math.max(0, Math.min(1, edge));
 
+    // Add subtle radial noise for realism
+    const radialNoise = (Math.sin(u * 50) * 0.02 + Math.sin(u * 120) * 0.01) * alpha;
+    alpha = Math.max(0, Math.min(1, alpha + radialNoise));
+
     for (let y = 0; y < H; y++) {
-      // Fake illumination: one side of the ring reads brighter, the other dimmer.
+      // Improved illumination model: brighter on the sun-facing side
       const v = y / (H - 1);
-      const illumination = 0.85 + 0.15 * v;
+      const illumination = 0.75 + 0.25 * Math.cos(v * Math.PI * 2);
       const a = Math.min(1, alpha * illumination);
       const idx = (y * W + x) * 4;
-      data[idx] = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
+      data[idx] = Math.round(r * (0.9 + 0.1 * v));
+      data[idx + 1] = Math.round(g * (0.9 + 0.1 * v));
+      data[idx + 2] = Math.round(b * (0.9 + 0.1 * v));
       data[idx + 3] = Math.round(a * 255);
     }
   }
@@ -197,6 +246,7 @@ interface RingSystemProps {
 
 export default function RingSystem({ body, planetRadius }: RingSystemProps) {
   const ringParams = RING_PARAMETERS[body.id];
+  const meshRef = useRef<THREE.Mesh>(null);
 
   if (!ringParams) return null;
 
@@ -207,10 +257,19 @@ export default function RingSystem({ body, planetRadius }: RingSystemProps) {
 
   const texture = useMemo(() => makeRingTexture(ringParams, body.id), [body.id]);
 
+  // Subtle ring rotation for visual life
+  useFrame(({ clock }: { clock: { elapsedTime: number } }) => {
+    if (meshRef.current) {
+      const rotationSpeed = body.id === "saturn" ? 0.0001 : 0.0002;
+      meshRef.current.rotation.z = clock.elapsedTime * rotationSpeed;
+    }
+  });
+
   // Rendered inside Planet's spin group, which already applies body.tilt,
   // so the ring plane lies flat relative to the tilted equator.
   return (
     <mesh
+      ref={meshRef}
       rotation={[-Math.PI / 2, 0, 0]}
       geometry={geometry}
       frustumCulled={false}

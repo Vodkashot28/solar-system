@@ -218,11 +218,6 @@ export function registerRoutes(app: Express): Server {
     await handleCorrection(bodyId, req.body ?? {}, res);
   });
 
-  // POST /api/classify/:bodyId/correct  (mirrors FastAPI endpoint path)
-  app.post("/api/classify/:bodyId/correct", async (req, res) => {
-    await handleCorrection(req.params.bodyId, req.body ?? {}, res);
-  });
-
   // ── Celestial bodies CRUD ────────────────────────────────────────────────
 
   app.get("/api/bodies", async (_req, res) => {
