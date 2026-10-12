@@ -46,9 +46,11 @@ type Props = {
   positions: React.MutableRefObject<Record<string, THREE.Vector3>>;
   /** Delete handler for custom (API-created) bodies. */
   onDeleteCustom?: (bodyId: string) => Promise<boolean> | boolean;
+  /** Open comparison tool with this body preselected */
+  onCompare?: (body: Body) => void;
 };
 
-export default function BodyDetailModal({ body, onClose, positions, onDeleteCustom }: Props) {
+export default function BodyDetailModal({ body, onClose, positions, onDeleteCustom, onCompare }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const focus = useCameraFocus((s) => s.focus);
 
@@ -86,6 +88,20 @@ export default function BodyDetailModal({ body, onClose, positions, onDeleteCust
             <div className="text-xl sm:text-xl font-light text-white mt-0.5">{body.name}</div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {onCompare && (
+              <button
+                onClick={() => {
+                  onCompare(body);
+                  onClose();
+                }}
+                aria-label={`Compare ${body.name} with other bodies`}
+                title="Compare with other bodies"
+                className="min-h-[44px] flex items-center rounded-full border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-semibold text-purple-200/90 transition-all duration-150 hover:bg-purple-400/20 hover:text-purple-100 active:scale-95"
+              >
+                <span className="hidden xs:inline">Compare</span>
+                <span className="xs:hidden">⚖</span>
+              </button>
+            )}
             {onDeleteCustom && (
               <button
                 onClick={async () => {

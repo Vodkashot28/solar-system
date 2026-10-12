@@ -81,7 +81,10 @@ export const playerCharacters = pgTable('player_characters', {
   // column would not match the referenced primary key type in Postgres.
   currentBodyId: integer('current_body_id').notNull().references(() => celestialBodies.id),
   reputation: integer('reputation').default(0),
+  // Summarized conversation history for chat continuity (periodically updated)
+  contextSummary: text('context_summary'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 // Telegram bot: chat history per celestial body / station
@@ -91,6 +94,16 @@ export const chatLogs = pgTable('chat_logs', {
   senderName: text('sender_name').notNull(),
   message: text('message').notNull(),
   isAi: integer('is_ai').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Travel history: tracks player movements across the solar system
+export const travelHistory = pgTable('travel_history', {
+  id: serial('id').primaryKey(),
+  telegramUserId: bigint('telegram_user_id', { mode: 'number' }).notNull(),
+  fromBodyId: integer('from_body_id').references(() => celestialBodies.id),
+  toBodyId: integer('to_body_id').notNull().references(() => celestialBodies.id),
+  source: text('source').notNull().default('telegram'), // 'telegram' | 'web'
   createdAt: timestamp('created_at').defaultNow(),
 });
 

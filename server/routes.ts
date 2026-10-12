@@ -2,8 +2,8 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { db } from "./db";
-import { celestialBodies, playerCharacters } from "../shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { celestialBodies, playerCharacters, travelHistory } from "../shared/schema";
+import { eq, sql, desc, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { getMergedAICache, FILE_CACHE_COUNT, getLastDBCount } from "./ai-cache";
 import { handleCorrection } from "./corrections";
@@ -404,6 +404,13 @@ export function registerRoutes(app: Express): Server {
         destName = body[0].name;
       }
 
+      // Get current location before moving (for travel history)
+      const currentPlayer = await db.select()
+        .from(playerCharacters)
+        .where(eq(playerCharacters.telegramUserId, tgId))
+        .limit(1);
+      const fromBodyId = currentPlayer.length > 0 ? currentPlayer[0].currentBodyId : null;
+
       // Upsert the player at the destination (single atomic statement).
       const playerName =
         typeof name === "string" && name.trim() ? String(name).trim() : "Traveler";
@@ -411,9 +418,24 @@ export function registerRoutes(app: Express): Server {
         .values({ telegramUserId: tgId, name: playerName, currentBodyId: destId })
         .onConflictDoUpdate({
           target: playerCharacters.telegramUserId,
-          set: { currentBodyId: destId },
+          set: { currentBodyId: destId, updatedAt: sql`now()` },
         })
         .returning();
+      
+      // Track travel history (skip if same location or first registration)
+      if (fromBodyId !== null && fromBodyId !== destId) {
+        await db.insert(travelHistory)
+          .values({
+            telegramUserId: tgId,
+            fromBodyId,
+            toBodyId: destId,
+            source: 'web',
+          })
+          .catch((err) => {
+            // Non-critical — log but don't fail the request
+            logger.warn({ err, userId: tgId }, 'Failed to record travel history');
+          });
+      }
       
       // Broadcast movement to all connected web clients (SSE)
       broadcastPlayerMovement(tgId, destId, destName);
@@ -422,6 +444,76 @@ export function registerRoutes(app: Express): Server {
     } catch (err) {
       logger.error({ err, telegramUserId: tgId }, 'DB unavailable — failed to update player location');
       res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  // ── Server-Sent Events Stream ─────────────────────────────────────────────
+  app.get("/api/player/events", SSE_LIMIT, (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    // Send initial connection event
+    res.write(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`);
+
+    sseClients.add(res);
+    logger.info(`SSE client connected (total: ${sseClients.size})`);
+
+    req.on("close", () => {
+      sseClients.delete(res);
+      logger.info(`SSE client disconnected (remaining: ${sseClients.size})`);
+    });
+  });
+
+  // ── Travel History ────────────────────────────────────────────────────────
+  app.get("/api/player/:telegramUserId/history", async (req, res) => {
+    const tgId = parseTelegramUserId(req.params.telegramUserId);
+    if (tgId === null) {
+      res.status(400).json({ error: "Invalid telegram user id" });
+      return;
+    }
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    
+    try {
+      // Fetch travel history with body name resolution
+      const history = await db
+        .select({
+          id: travelHistory.id,
+          fromBodyId: travelHistory.fromBodyId,
+          toBodyId: travelHistory.toBodyId,
+          source: travelHistory.source,
+          createdAt: travelHistory.createdAt,
+        })
+        .from(travelHistory)
+        .where(eq(travelHistory.telegramUserId, tgId))
+        .orderBy(desc(travelHistory.createdAt))
+        .limit(limit);
+
+      // Resolve body names in a second query (simpler than complex joins)
+      const bodyIds = new Set<number>();
+      history.forEach((h) => {
+        if (h.fromBodyId) bodyIds.add(h.fromBodyId);
+        bodyIds.add(h.toBodyId);
+      });
+
+      const bodies = await db
+        .select({ id: celestialBodies.id, name: celestialBodies.name })
+        .from(celestialBodies)
+        .where(inArray(celestialBodies.id, Array.from(bodyIds)));
+
+      const bodyMap = new Map(bodies.map((b) => [b.id, b.name]));
+
+      const enriched = history.map((h) => ({
+        ...h,
+        fromBodyName: h.fromBodyId ? bodyMap.get(h.fromBodyId) ?? null : null,
+        toBodyName: bodyMap.get(h.toBodyId) ?? "Unknown",
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      logger.error({ err, telegramUserId: tgId }, 'Failed to fetch travel history');
+      res.status(500).json({ error: "Failed to fetch travel history" });
     }
   });
 

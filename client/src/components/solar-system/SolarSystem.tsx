@@ -35,6 +35,7 @@ import { usePlayerMovements, type PlayerMovementEvent } from "@/hooks/usePlayerM
 // Lazy load heavy modal components to reduce initial bundle size
 const BodyDetailModal = lazy(() => import("./BodyDetailModal"));
 const CustomBodyModal = lazy(() => import("./CustomBodyModal"));
+const BodyComparisonTool = lazy(() => import("./BodyComparisonTool"));
 
 // ── Scale multipliers for each view mode ─────────────────────────────────────
 const SCALE_VISUAL          = 1;
@@ -82,6 +83,7 @@ export default function SolarSystem() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [customBodyOpen, setCustomBodyOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [comparisonBody, setComparisonBody] = useState<Body | null>(null);
   const [filmGrain, setFilmGrain] = useState(() => {
     // Respect prefers-reduced-motion: disable film grain for users who prefer reduced motion
     if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -556,6 +558,7 @@ export default function SolarSystem() {
           onClose={() => setDetailBodyId(null)}
           positions={positions}
           onDeleteCustom={isCustomBodyId(detailBodyId ?? "") ? removeCustomBody : undefined}
+          onCompare={(body) => setComparisonBody(body)}
         />
       </Suspense>
 
@@ -568,6 +571,16 @@ export default function SolarSystem() {
             focus(bodyId);
           }}
         />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        {comparisonBody && (
+          <BodyComparisonTool
+            initialBody={comparisonBody}
+            allBodies={allBodies}
+            onClose={() => setComparisonBody(null)}
+          />
+        )}
       </Suspense>
     </div>
   );

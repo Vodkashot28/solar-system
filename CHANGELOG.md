@@ -2,6 +2,34 @@
 
 All notable changes. Unreleased entries are uncommitted work in progress.
 
+## [Unreleased] — 2026-09-01
+
+### Feature: P0 Priority Features — Location Sync, Chat Memory, Body Comparison
+
+- **Telegram `/travel` command** — move between celestial bodies via `/travel <body name>`, syncs location with web app in real-time via Express API; arrival notifications for station bodies (Earth/Moon/Makemake); travel history tracking records all movements
+- **Chat memory summarization** — automatic conversation compression using OpenCode Zen every 12+ messages; summaries stored in `player_characters.context_summary` and loaded on chat initialization; preserves relationship continuity across sessions
+- **Body comparison tool** — interactive side-by-side comparison of up to 4 celestial bodies with radar chart visualization (Chart.js), searchable catalog, detailed data tables; access via "Compare" button in body detail modals; compares all 12 astronomical properties (mass, radius, density, gravity, temperature, orbital period, semi-major axis, eccentricity, inclination, rotation period, axial tilt)
+- **Real-time location sync** — Server-Sent Events (SSE) endpoint `/api/player/events` broadcasts player movements to all connected web clients; enables live tracking of Telegram bot users on the web map
+- **Travel history API** — `/api/player/:id/history` retrieves exploration journey with body name resolution, source attribution (web/telegram), and pagination support (up to 100 entries)
+
+### Database: schema changes (migration 0005)
+- New `travel_history` table: tracks player movements between bodies with `from_body_id`, `to_body_id`, `source`, `created_at`
+- `player_characters`: added `context_summary TEXT` (chat memory), `updated_at TIMESTAMP`
+- `celestial_bodies`: scene params converted to NOT NULL with defaults (visual_radius, orbit, orbit_speed, spin_speed, tilt, phase, color, has_rings)
+- Foreign keys: `travel_history.from_body_id` → `celestial_bodies.id`, `travel_history.to_body_id` → `celestial_bodies.id`
+
+### Tech stack updates
+- Added `chart.js@^4.x` and `react-chartjs-2@^5.x` for body comparison radar charts
+- New `scripts/run-migration.ts` for manual migration execution (drizzle-kit push workaround)
+- Test script `test-p0-features.sh` for API endpoint validation
+
+### Telegram bot enhancements
+- `_track_travel()` — records movement history when Express API unavailable (fallback path)
+- `_get_current_body_id()` — retrieves player location for history tracking
+- `_summarize_conversation()` — async background task for chat memory compression
+- `_get_context_summary()` / `_update_context_summary()` — DB persistence for summaries
+- `USER_LOCATIONS` cache — sub-10ms location lookups (avoids DB query per message)
+
 ## [Unreleased] — 2026-08-14
 
 ### Feature: "View in Your Space" (WebXR AR + iOS AR Quick Look)

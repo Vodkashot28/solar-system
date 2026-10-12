@@ -232,16 +232,17 @@ polling app (@SolarisCommandBot) that routes chats to station AIs:
 - Needs `TELEGRAM_BOT_TOKEN` + `OPENCODE_API_KEY` (+ `DATABASE_URL` for persistence) in root `.env` (template in `.env.example`); loads `../.env` itself via python-dotenv
 - 429 / `FreeUsageLimitError` → "Relay Busy" flavor text; other model errors → "*Signal lost...*"; Markdown rejection → plain-text fallback
 - **Persistence (psycopg2, fail-silent)**: `/start` registers the player in `player_characters` (stationed at Earth); station routing reads `current_body_id` → `celestial_bodies.name` (`STATION_AIS` keys); all messages persisted to `chat_logs` (`is_ai` flag, station body FK)
+- **Chat memory summarization**: Automatic conversation compression every 12+ messages via `_summarize_conversation()` (async background task using OpenCode Zen); summaries stored in `player_characters.context_summary` and loaded on init; preserves relationship continuity across sessions; fails silently if model unavailable
+- **Performance**: `USER_LOCATIONS` cache (sub-10ms lookups), `USER_CONTEXTS` in-memory rolling window (6 messages + summary), `prune_stale_contexts()` cleanup (1-hour idle threshold)
 - IPv4-first `socket.getaddrinfo` patch for hosts with no IPv6 route (this box)
 - Run: `npm run ai:bot`; daemon: `setsid nohup npm run ai:bot > /tmp/aibot.log 2>&1 &`
-- Scope: chat memory summarization is upcoming (schema already supports it)
-- **`/travel <body>`** (web↔Telegram sync): resolves the destination against `celestial_bodies` (exact name, else LIKE closest matches), then `PATCH /api/player/<id>/location` on Express (single source of truth — bot + web share the same Postgres) with a direct psycopg2 `current_body_id` upsert as the offline fallback; station arrivals announce the `STATION_AIS` character, otherwise "You have arrived at <name>."; DB/API down → "*Signal lost...*"
+- **`/travel <body>`** (web↔Telegram sync): resolves the destination against `celestial_bodies` (exact name, else LIKE closest matches), then `PATCH /api/player/<id>/location` on Express (single source of truth — bot + web share the same Postgres) with a direct psycopg2 `current_body_id` upsert as the offline fallback; station arrivals announce the `STATION_AIS` character, otherwise "You have arrived at <name>."; DB/API down → "*Signal lost...*"; travel history tracked in `travel_history` table with source attribution
 
 ## Integration Notes
 
 - Express loads `data/ai_cache.json` at startup — no FastAPI runtime needed in production
 - Frontend fetches `/api/ai/precomputed` once on mount; falls back to per-body `GET /api/ai/classify/:bodyId`
-- `shared/schema.ts` mirrors spaceAI's SQLAlchemy models as Drizzle `pgTable` (6 tables: bodies, ai_cache, prediction_logs, corrections, player_characters, chat_logs)
+- `shared/schema.ts` mirrors spaceAI's SQLAlchemy models as Drizzle `pgTable` (7 tables: celestial_bodies, ai_cache, prediction_logs, corrections, player_characters, chat_logs, travel_history)
 - `scripts/validate_models.py` checks generated GLBs against trained classifier
 - `telegram_bot.py` talks to OpenCode Zen, not the ML service — AI classification and chat brains are separate systems
 

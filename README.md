@@ -62,7 +62,15 @@ Fiber, Drei, and Three.js.
 - **Telegram bot** — chat with SOLARIS Network station AIs on Telegram
   (@SolarisCommandBot): A.R.E.S. Flight Command (Earth), Dr. Vance (Lunar
   Gateway), Deep-Space Drone 09 (Kuiper Belt). Runs on OpenCode Zen with
-  `npm run ai:bot`
+  `npm run ai:bot`. **New**: `/travel` command syncs location between Telegram
+  and web app; chat memory summarization preserves conversation context across
+  sessions; travel history tracking records your journey
+- **Body comparison tool** — interactive side-by-side comparison of up to 4
+  celestial bodies with radar chart visualization, searchable catalog, and
+  detailed data tables. Access via "Compare" button in any body detail modal
+- **Real-time location sync** — Server-Sent Events (SSE) broadcast player
+  movements between Telegram bot and web clients; travel history API tracks
+  your exploration journey with source attribution (web/telegram)
 - **Progressive Web App (PWA)** — installable on desktop and mobile with
   offline support. Service worker precaches static assets (~2 MB) and caches
   GLB models (30 days), Draco WASM (1 year), and API calls (NetworkFirst, 5
@@ -102,6 +110,8 @@ flowchart TB
         API1["/api/bodies CRUD"]
         API2["/api/ai/precomputed · classify"]
         API3["/api/player/:id/location"]
+        API4["/api/player/events (SSE)"]
+        API5["/api/player/:id/history"]
         Static["Static SPA + draco wasm"]
     end
 
@@ -109,7 +119,7 @@ flowchart TB
         ML["/classify · /correct · dashboard"]
     end
 
-    DB[("PostgreSQL — Neon<br/>bodies · ai_cache · players · chat_logs")]
+    DB[("PostgreSQL — Neon<br/>bodies · ai_cache · players · chat_logs · travel_history")]
 
     subgraph Bot["Telegram worker (Render)"]
         Bot1["python-telegram-bot<br/>@SolarisCommandBot"]
@@ -149,6 +159,7 @@ client/src/components/solar-system/
   FocusCamera.tsx        — Camera lerp driven by zustand focus store
   LoadingSpinner.tsx     — Per-body loading progress grid
   BodyDetailModal.tsx    — Full-body detail modal with data explorer + mission info + similar bodies
+  BodyComparisonTool.tsx — Interactive comparison tool with radar chart + data tables
   CustomBodyModal.tsx    — "+ Add" form for user-created bodies
   BodySearch.tsx         — Search palette (press "/")
   EnhancedDataExplorer.tsx  — Collapsible data panels (physical/orbital/rotation/AI)
@@ -302,6 +313,7 @@ upcoming.
 | **React 18** + **TypeScript** | UI framework |
 | **Three.js** / **@react-three/fiber** / **@react-three/drei** | 3D rendering (R3F) |
 | **postprocessing** | Bloom, visual effects |
+| **Chart.js** / **react-chartjs-2** | Radar charts for body comparison |
 | **Zustand** | State management (`stores/` — camera-focus, cinematic-mode, performance, simulation) |
 | **Tailwind CSS** | Styling (HUD) |
 | **Vite** | Build tool / dev server |
@@ -357,6 +369,10 @@ All routes prefixed with `/api`. Request cascade: Drizzle DB → `spaceAI/data/a
 | `POST` | `/api/bodies` | Create a celestial body | JSON: `{ name, type, ... }` | `201` → created body |
 | `PATCH` | `/api/bodies/:id` | Update allowed fields | JSON with whitelisted fields (name, type, mass, radius, density, gravity, temperature, orbitalPeriod, semiMajorAxis, eccentricity, inclination, rotationPeriod, axialTilt, aiClassification, aiConfidenceScore) | Updated `CelestialBody` or `404` |
 | `DELETE` | `/api/bodies/:id` | Delete a celestial body | — | `{ status: "ok", deleted: CelestialBody }` or `404` |
+| `GET` | `/api/player/:telegramUserId` | Get player profile | — | Player object or `404` |
+| `PATCH` | `/api/player/:telegramUserId/location` | Update player location (web or Telegram) | JSON: `{ bodyId }` or `{ bodyName, name }` | Updated player + `bodyName` |
+| `GET` | `/api/player/:telegramUserId/history` | Get travel history | Query: `?limit=20` (max 100) | `[{ id, fromBodyId, toBodyId, fromBodyName, toBodyName, source, createdAt }]` |
+| `GET` | `/api/player/events` | Real-time player movement stream (SSE) | — | Server-Sent Events stream with `{ type, userId, bodyId, bodyName, timestamp }` |
 
 ### FastAPI (`:8000` — ML Microservice)
 

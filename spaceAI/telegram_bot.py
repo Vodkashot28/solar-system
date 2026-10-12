@@ -255,6 +255,52 @@ def _move_player(conn, telegram_user_id, body_id, name):
     conn.commit()
 
 
+def _track_travel(conn, telegram_user_id, from_body_id, to_body_id):
+    """Record travel history (skip if same location or from is None)."""
+    if from_body_id is None or from_body_id == to_body_id:
+        return
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO travel_history (telegram_user_id, from_body_id, to_body_id, source) "
+        "VALUES (%s, %s, %s, 'telegram')",
+        (telegram_user_id, from_body_id, to_body_id),
+    )
+    conn.commit()
+
+
+def _get_current_body_id(conn, telegram_user_id):
+    """Get player's current body ID (for travel history)."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT current_body_id FROM player_characters WHERE telegram_user_id = %s",
+        (telegram_user_id,),
+    )
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _get_context_summary(conn, telegram_user_id):
+    """Fetch stored conversation summary."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT context_summary FROM player_characters WHERE telegram_user_id = %s",
+        (telegram_user_id,),
+    )
+    row = cur.fetchone()
+    return row[0] if row and row[0] else None
+
+
+def _update_context_summary(conn, telegram_user_id, summary):
+    """Store conversation summary."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE player_characters SET context_summary = %s, updated_at = now() "
+        "WHERE telegram_user_id = %s",
+        (summary, telegram_user_id),
+    )
+    conn.commit()
+
+
 def _log_message(conn, body_key, sender_name, message, is_ai):
     body_id = _body_db_id(conn, body_key or "earth")
     cur = conn.cursor()
@@ -330,6 +376,57 @@ async def call_llm_with_backoff(model: str, messages: list, max_retries=2):
     raise  # Exhausted retries
 
 
+async def _summarize_conversation(telegram_user_id: int, history: list, station_name: str):
+    """Background task: summarize conversation and store in DB.
+    
+    Compresses conversation history into a summary that captures:
+    - Key topics discussed
+    - User's interests/questions
+    - Station AI's role/responses
+    - Any important decisions or data shared
+    """
+    try:
+        # Build summarization prompt from conversation history
+        conversation_text = "\n".join([
+            f"{'User' if msg['role'] == 'user' else station_name}: {msg['content']}"
+            for msg in history
+        ])
+        
+        summary_messages = [
+            {
+                "role": "system",
+                "content": "Summarize this conversation in 2-3 sentences. Capture key topics, "
+                           "user interests, and important information shared. Be concise.",
+            },
+            {"role": "user", "content": f"Conversation:\n{conversation_text}"},
+        ]
+        
+        # Use first healthy model for summarization
+        for model in get_healthy_models():
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=summary_messages,
+                    max_tokens=100,
+                    timeout=10.0,
+                )
+                summary = response.choices[0].message.content.strip()
+                
+                # Store summary in DB (non-blocking, fail-silent)
+                await _db(_update_context_summary, telegram_user_id, summary)
+                
+                # Clear old messages from memory, keep only recent 6
+                USER_CONTEXTS[telegram_user_id] = history[-MAX_CONTEXT_MESSAGES:]
+                
+                print(f"✓ Summarized conversation for user {telegram_user_id}", flush=True)
+                break
+            except Exception as e:
+                print(f"⚠ Summarization failed with {model}: {e}", flush=True)
+                continue
+    except Exception as e:
+        print(f"⚠ Background summarization error: {e}", flush=True)
+
+
 async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_text = update.message.text
@@ -346,6 +443,15 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get or initialize conversation history for this user
     if user.id not in USER_CONTEXTS:
         USER_CONTEXTS[user.id] = []
+        # Load stored summary if available
+        summary = await _db(_get_context_summary, user.id)
+        if summary:
+            # Inject summary as a system message to preserve context
+            USER_CONTEXTS[user.id].append({
+                "role": "system",
+                "content": f"Previous conversation summary: {summary}"
+            })
+    
     history = USER_CONTEXTS[user.id]
     USER_CONTEXT_TIMESTAMPS[user.id] = time.time()
 
@@ -356,7 +462,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "content": f"You are {station['name']}, {station['role']}. "
                        f"Keep replies under 3 sentences. Remember prior conversation.",
         },
-        *history,  # Past conversation (up to 6 messages)
+        *history,  # Past conversation (up to 6 messages) + optional summary
         {"role": "user", "content": user_text},
     ]
 
@@ -389,6 +495,11 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": reply})
         USER_CONTEXTS[user.id] = history[-MAX_CONTEXT_MESSAGES:]
+        
+        # Trigger summarization every 20 messages to compress long conversations
+        message_count = len(history)
+        if message_count >= MAX_CONTEXT_MESSAGES * 2:  # 12+ messages
+            asyncio.create_task(_summarize_conversation(user.id, history, station["name"]))
 
     await _db(_log_message, body_id, station["name"], reply, True)
 
@@ -511,6 +622,9 @@ async def travel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     body_id, body_name = matches[0]
     player_name = (await _db(_player_name, user.id)) or user.first_name or "Recruit"
+    
+    # Get current location for travel history
+    from_body_id = await _db(_get_current_body_id, user.id)
 
     # Express PATCH first (same Postgres as the web app — single source of
     # truth). Only if Express is unreachable do we update the DB directly; both
@@ -519,6 +633,8 @@ async def travel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if player:
         body_name = player.get("bodyName") or body_name
     else:
+        # Track travel history in DB (Express tracks it automatically)
+        await _db(_track_travel, user.id, from_body_id, body_id)
         await _db(_move_player, user.id, body_id, player_name)
         location = (await _db(_player_location, user.id)) or ""
         if not location:

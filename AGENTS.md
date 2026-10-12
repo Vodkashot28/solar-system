@@ -83,8 +83,9 @@
 | `ai_cache` | Precomputed AI classification per bodyId |
 | `prediction_logs` | Regression prediction history |
 | `corrections` | User-submitted classification corrections |
-| `player_characters` | Player profile + location (`current_body_id` → `celestial_bodies.id`) |
+| `player_characters` | Player profile + location (`current_body_id` → `celestial_bodies.id`) + chat memory (`context_summary`) |
 | `chat_logs` | Telegram bot chat history (`body_id` → `celestial_bodies.id`) |
+| `travel_history` | Player movement tracking (`from_body_id`, `to_body_id`, `source`, `created_at`) |
 
 `server/db.ts` initialises Drizzle with `postgres` driver.
 
@@ -102,7 +103,9 @@ All in `server/routes.ts`. Request cascade: Drizzle DB → `spaceAI/data/ai_cach
 | `/api/bodies` | GET/POST | CRUD for `celestial_bodies` table |
 | `/api/bodies/:id` | GET/PATCH/DELETE | Single body CRUD |
 | `/api/player/:telegramUserId` | GET | Player row (`player_characters`) or 404 |
-| `/api/player/:telegramUserId/location` | PATCH | Upsert player location via `{bodyId}` or `{bodyName}` (case-insensitive; 404 if body missing) |
+| `/api/player/:telegramUserId/location` | PATCH | Upsert player location via `{bodyId}` or `{bodyName}` (case-insensitive; 404 if body missing); tracks travel history |
+| `/api/player/:telegramUserId/history` | GET | Fetch travel history with body names (query: `?limit=20`, max 100) |
+| `/api/player/events` | GET | Server-Sent Events stream for real-time player movements |
 
 ## spaceAI (Python ML on :8000)
 
@@ -121,7 +124,9 @@ All in `server/routes.ts`. Request cascade: Drizzle DB → `spaceAI/data/ai_cach
 - Needs `TELEGRAM_BOT_TOKEN` + `OPENCODE_API_KEY` (+ `DATABASE_URL` for persistence) in root `.env`; bot runs with cwd=`spaceAI/` and loads `../.env` via python-dotenv (missing .env = placeholder token = "Invalid token" — not a token problem)
 - IPv4-first `socket.getaddrinfo` patch (box has no IPv6 route; DNS prefers AAAA for api.telegram.org/opencode.ai — direct `curl` calls need `-4`)
 - Run: `npm run ai:bot` (uses `spaceAI/venv` — plain python has no deps). Daemon: `setsid nohup npm run ai:bot > /tmp/aibot.log 2>&1 &`; health-check with `ps -eo pid,etime,cmd | grep "telegram_bot[.]py"` (escape the dot or pkill matches its own shell)
-- **`/travel` command (web↔Telegram location sync)**: `/travel <body name>` resolves against `celestial_bodies` (exact case-insensitive name, else LIKE closest matches for the ambiguity error); moves the player via `PATCH /api/player/<id>/location` (Express is the single source of truth — the bot and web app share the same Postgres), falling back to a direct psycopg2 upsert of `current_body_id` if Express is unreachable. Arrivals at `STATION_AIS` keys (earth/moon/makemake) announce the station character; generic bodies get "You have arrived at <name>." DB/API down → "*Signal lost with SOLARIS Network...*". Express resolves `bodyName` case-insensitively and returns the player row plus `bodyName`. Chat memory summarization is still upcoming.
+- **`/travel` command (web↔Telegram location sync)**: `/travel <body name>` resolves against `celestial_bodies` (exact case-insensitive name, else LIKE closest matches for the ambiguity error); moves the player via `PATCH /api/player/<id>/location` (Express is the single source of truth — the bot and web app share the same Postgres), falling back to a direct psycopg2 upsert of `current_body_id` if Express is unreachable. Arrivals at `STATION_AIS` keys (earth/moon/makemake) announce the station character; generic bodies get "You have arrived at <name>." DB/API down → "*Signal lost with SOLARIS Network...*". Express resolves `bodyName` case-insensitively and returns the player row plus `bodyName`. Travel history recorded automatically in `travel_history` table with source attribution.
+- **Chat memory summarization**: Automatic conversation compression every 12+ messages using OpenCode Zen; summaries stored in `player_characters.context_summary` and loaded on chat init; `_summarize_conversation()` runs as async background task (fail-silent); `_get_context_summary()` / `_update_context_summary()` handle DB persistence. Preserves relationship continuity across sessions; history pruned to last 6 messages after summarization.
+- **Performance optimizations**: `USER_LOCATIONS` cache for sub-10ms location lookups (avoids DB query per message); `USER_CONTEXTS` in-memory rolling window (6 messages + optional summary); `USER_CONTEXT_TIMESTAMPS` for idle cleanup (1-hour threshold); `prune_stale_contexts()` prevents memory leaks.
 
 ## Known Issues
 

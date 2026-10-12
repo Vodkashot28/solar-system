@@ -22,6 +22,7 @@ ml_framework: scikit-learn
 - **React Three Fiber** (`@react-three/fiber`) — Three.js React renderer
 - **@react-three/drei** — R3F utility components
 - **Three.js** — 3D engine (GLB model rendering)
+- **Chart.js / react-chartjs-2** — radar charts for body comparison
 - **Zustand** — state management
 - **Tailwind CSS** — styling
 - **Vite** — build tool / dev server
@@ -48,6 +49,8 @@ ml_framework: scikit-learn
 - `spaceAI/telegram_bot.py` — polling bot @SolarisCommandBot
 - Stations: earth → A.R.E.S. Flight Command · moon → Dr. Vance · makemake → Deep-Space Drone 09
 - Brain: OpenCode Zen `deepseek-v4-flash-free` (`AsyncOpenAI`, base_url `https://opencode.ai/zen/v1`)
+- **`/travel <body>`** — syncs location with web app via Express API; travel history tracked
+- **Chat memory** — automatic summarization every 12+ messages; summaries stored in `player_characters.context_summary`
 - Needs `TELEGRAM_BOT_TOKEN` + `OPENCODE_API_KEY` in root `.env`; run via `npm run ai:bot`
 
 ## Infrastructure
